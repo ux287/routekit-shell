@@ -1,0 +1,11 @@
+version: 1
+imports: []
+schemas:
+  - id: root
+    title: root
+    desc: root
+    parent: root
+    children:
+      - pattern: "stack.*"
+        desc: stack notes
+

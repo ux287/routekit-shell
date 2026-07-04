@@ -1,0 +1,23 @@
+:root {
+  --grid-line: rgba(56, 189, 248, 0.2);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent 99px,
+      var(--grid-line) 100px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 99px,
+      var(--grid-line) 100px
+    );
+  pointer-events: none;
+  z-index: 0;
+}
