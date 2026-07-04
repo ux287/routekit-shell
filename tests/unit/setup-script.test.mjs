@@ -1,0 +1,181 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+import { tmpdir } from "os";
+import { spawnSync } from "child_process";
+import { ensureEnv, ensureMcpJson, readProjectId, runSetup } from "../../scripts/setup.mjs";
+
+// Unit coverage for the turnkey `npm run setup` onboarding script. The pure file logic
+// (ensureEnv / ensureMcpJson / readProjectId) is tested directly in a temp dir. The spawn
+// side-effects (dev:link, rag init/embed) are asserted via an INJECTED runner that records
+// intent — never executed. One real subprocess run exercises the no-TTY CLI exit path with a
+// hard timeout guard (no dev:link/rag runs there because there is no key).
+
+const ENV_EXAMPLE = [
+  "ROUTEKIT_LLM_PROVIDER=anthropic",
+  "ROUTEKIT_LLM_MODEL=claude-sonnet-4-6",
+  "ANTHROPIC_API_KEY=",
+  "",
+  "# ROUTEKIT_LLM_PROVIDER is optional — inferred from whichever key is set.",
+  "",
+].join("\n");
+const MCP_EXAMPLE = '{\n  "mcpServers": {}\n}\n';
+const SETUP_MJS = join(dirname(fileURLToPath(import.meta.url)), "../../scripts/setup.mjs");
+
+let root;
+beforeEach(() => {
+  root = mkdtempSync(join(tmpdir(), "rks-setup-"));
+  writeFileSync(join(root, ".env.example"), ENV_EXAMPLE);
+  writeFileSync(join(root, ".mcp.json.example"), MCP_EXAMPLE);
+  mkdirSync(join(root, ".rks"), { recursive: true });
+  writeFileSync(join(root, ".rks", "project.json"), JSON.stringify({ id: "routekit-shell-core" }));
+});
+afterEach(() => {
+  if (root) rmSync(root, { recursive: true, force: true });
+});
+
+describe("ensureEnv — template copy + key write", () => {
+  it("creates .env from .env.example when absent (no key)", () => {
+    const r = ensureEnv(root, {});
+    expect(existsSync(join(root, ".env"))).toBe(true);
+    expect(r).toEqual({ hasKey: false, action: "created-no-key" });
+  });
+
+  it("writes ANTHROPIC_API_KEY when a key is provided (interactive path)", () => {
+    const r = ensureEnv(root, { key: "sk-ant-TESTKEY" });
+    expect(readFileSync(join(root, ".env"), "utf8")).toMatch(/^ANTHROPIC_API_KEY=sk-ant-TESTKEY$/m);
+    expect(r).toEqual({ hasKey: true, action: "created-with-key" });
+  });
+});
+
+describe("ensureEnv — idempotency (never clobber an existing .env)", () => {
+  it("preserves an existing keyed .env byte-for-byte and does NOT write the offered key", () => {
+    const existing = "ANTHROPIC_API_KEY=sk-ant-MINE\nCUSTOM=1\n";
+    writeFileSync(join(root, ".env"), existing);
+    const r = ensureEnv(root, { key: "sk-ant-SHOULD-NOT-WRITE" });
+    expect(readFileSync(join(root, ".env"), "utf8")).toBe(existing);
+    expect(r).toEqual({ hasKey: true, action: "preserved" });
+  });
+
+  it("preserves an existing keyless .env and reports hasKey=false", () => {
+    const existing = "ANTHROPIC_API_KEY=\nFOO=bar\n";
+    writeFileSync(join(root, ".env"), existing);
+    const r = ensureEnv(root, {});
+    expect(readFileSync(join(root, ".env"), "utf8")).toBe(existing);
+    expect(r).toEqual({ hasKey: false, action: "preserved" });
+  });
+});
+
+describe("ensureMcpJson", () => {
+  it("creates .mcp.json from template when absent", () => {
+    expect(ensureMcpJson(root, {})).toEqual({ action: "created" });
+    expect(existsSync(join(root, ".mcp.json"))).toBe(true);
+  });
+
+  it("leaves an existing .mcp.json untouched", () => {
+    const existing = '{"custom":true}\n';
+    writeFileSync(join(root, ".mcp.json"), existing);
+    expect(ensureMcpJson(root, {})).toEqual({ action: "preserved" });
+    expect(readFileSync(join(root, ".mcp.json"), "utf8")).toBe(existing);
+  });
+});
+
+describe("readProjectId", () => {
+  it("reads the id from .rks/project.json", () => {
+    expect(readProjectId(root)).toBe("routekit-shell-core");
+  });
+  it("falls back to routekit-shell-core when project.json is missing", () => {
+    rmSync(join(root, ".rks", "project.json"));
+    expect(readProjectId(root)).toBe("routekit-shell-core");
+  });
+});
+
+describe("runSetup — spawn intent via injected runner (no real execution)", () => {
+  it("WOULD run dev:link, then rag init + embed with the projectId", async () => {
+    const calls = [];
+    const r = await runSetup({
+      root,
+      isTTY: true,
+      promptKey: async () => "sk-ant-TESTKEY",
+      runner: (cmd, args) => calls.push([cmd, ...args]),
+      log: () => {},
+    });
+    expect(r.ok).toBe(true);
+    expect(r.ranSpawns).toBe(true);
+    expect(calls).toEqual([
+      ["npm", "run", "dev:link"],
+      ["routekit", "project", "add-existing", "--id", "routekit-shell-core", "--stack", "routekit-shell", "--path", root],
+      ["routekit", "rag", "init", "routekit-shell-core"],
+      ["routekit", "rag", "embed", "routekit-shell-core"],
+    ]);
+    expect(readFileSync(join(root, ".env"), "utf8")).toMatch(/ANTHROPIC_API_KEY=sk-ant-TESTKEY/);
+  });
+
+  it("registers with `add-existing` (not `attach`/`init`) AFTER dev:link and BEFORE rag init", async () => {
+    const calls = [];
+    await runSetup({
+      root,
+      isTTY: true,
+      promptKey: async () => "sk-ant-TESTKEY",
+      runner: (cmd, args) => calls.push([cmd, ...args]),
+      log: () => {},
+    });
+    const linkIdx = calls.findIndex((c) => c[0] === "npm" && c[2] === "dev:link");
+    const registerIdx = calls.findIndex((c) => c[0] === "routekit" && c[1] === "project");
+    const ragInitIdx = calls.findIndex((c) => c[0] === "routekit" && c[1] === "rag" && c[2] === "init");
+    // load-bearing order: registration needs `routekit` on PATH (from dev:link) and must populate
+    // the registry before rag init can resolve the project.
+    expect(linkIdx).toBeGreaterThanOrEqual(0);
+    expect(registerIdx).toBeGreaterThan(linkIdx);
+    expect(ragInitIdx).toBeGreaterThan(registerIdx);
+    expect(calls[registerIdx]).toEqual([
+      "routekit", "project", "add-existing", "--id", "routekit-shell-core", "--stack", "routekit-shell", "--path", root,
+    ]);
+    // must be the pure registry upsert `add-existing` — never `attach` (self-copies skills on a
+    // self-hosting clone → ENOENT) or `init` (throws ensureEmptyDirectory on a populated clone)
+    expect(calls.some((c) => c[1] === "project" && (c[2] === "attach" || c[2] === "init"))).toBe(false);
+  });
+
+  it("is idempotent — an existing keyed .env skips the prompt but still links + builds the KG", async () => {
+    writeFileSync(join(root, ".env"), "ANTHROPIC_API_KEY=sk-ant-EXISTING\n");
+    let prompted = false;
+    const calls = [];
+    const r = await runSetup({
+      root,
+      isTTY: true,
+      promptKey: async () => {
+        prompted = true;
+        return "sk-ant-NEW";
+      },
+      runner: (cmd, args) => calls.push([cmd, ...args]),
+      log: () => {},
+    });
+    expect(prompted).toBe(false);
+    expect(readFileSync(join(root, ".env"), "utf8")).toBe("ANTHROPIC_API_KEY=sk-ant-EXISTING\n");
+    expect(r.ranSpawns).toBe(true);
+    expect(calls[0]).toEqual(["npm", "run", "dev:link"]);
+  });
+
+  it("runs NO spawns when there is no key (non-interactive)", async () => {
+    const calls = [];
+    const r = await runSetup({ root, isTTY: false, runner: (c, a) => calls.push([c, ...a]), log: () => {} });
+    expect(r.ranSpawns).toBe(false);
+    expect(calls).toEqual([]);
+    expect(existsSync(join(root, ".env"))).toBe(true);
+  });
+});
+
+describe("setup.mjs CLI — no-TTY process exits 0 (real subprocess, timeout-guarded)", () => {
+  it("piped stdin: creates .env, prints guidance, exits 0, no hang, no dev:link/rag", () => {
+    const r = spawnSync("node", [SETUP_MJS], {
+      cwd: root,
+      input: "", // non-TTY stdin → no prompt path
+      encoding: "utf8",
+      timeout: 20000,
+    });
+    expect(r.status).toBe(0);
+    expect(existsSync(join(root, ".env"))).toBe(true);
+    expect(`${r.stdout || ""}${r.stderr || ""}`).toMatch(/set ANTHROPIC_API_KEY in \.env/);
+  });
+});
