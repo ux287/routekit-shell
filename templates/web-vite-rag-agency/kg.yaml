@@ -1,0 +1,70 @@
+stack: web-vite-rag-agency
+framework: vite-react
+runtime: node22
+code_roots:
+  - src
+  - scripts
+components:
+  layout_shell:
+    path: src/main.tsx
+    description: React Router shell for SPA.
+  hero_section:
+    path: src/components/HeroSection.tsx
+    description: Hero band.
+  cta_section:
+    path: src/components/CTASection.tsx
+    description: CTA block.
+  ui_primitives:
+    path: src/components/ui
+    description: UI primitives.
+  animated_card:
+    path: src/components/AnimatedCard.tsx
+    description: Animated card.
+  section_header:
+    path: src/components/SectionHeader.tsx
+    description: Section heading.
+  analytics:
+    path: src/utils/analytics.ts
+    description: Analytics helpers.
+  content_loader:
+    path: src/utils/contentLoader.ts
+    description: Markdown → JSON content loader.
+  fs_rag_router:
+    path: src/router.tsx
+    description: File-system and RAG routing helper.
+content:
+  dendron_vault:
+    type: dendron
+    path: notes
+    schema: notes/root.schema.yml
+  blog:
+    type: collection
+    source_pattern: "notes/stack.blog.*.md"
+    public_copy: public/blog
+    index: src/data/blog-index.json
+  portfolio:
+    type: collection
+    source_pattern: "notes/stack.portfolio.*.md"
+    public_copy: public/portfolio
+    index: src/data/portfolio.json
+  notes_mirror:
+    type: static_copy
+    source_pattern: "notes/**/*.md"
+    public_copy: public/notes
+design_tokens:
+  tailwind_theme:
+    file: tailwind.config.js
+  globals_css:
+    file: src/styles/globals.css
+scripts:
+  dev: "npm run dev"
+  build: "npm run build"
+  preview: "npm run preview"
+  content_build: "npm run content:build"
+  rag_init: "npm run rag:init"
+  rag_embed: "npm run rag:embed"
+  rag_query: "npm run rag:query"
+  setup_guardrails: "npm run setup:guardrails"
+deploy:
+  vercel:
+    config: vercel.json
