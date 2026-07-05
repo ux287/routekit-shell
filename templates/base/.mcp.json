@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "rks": {
+      "command": "node",
+      "args": ["__ROUTEKIT_SHELL_ROOT__/packages/mcp-rks/bin/mcp-rks.mjs"],
+      "env": {
+        "ROUTEKIT_PROJECT_ID": "__ROUTEKIT_PROJECT_ID__",
+        "ROUTEKIT_PROJECT_ROOT": "__ROUTEKIT_PROJECT_ROOT__"
+      }
+    }
+  }
+}

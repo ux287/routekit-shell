@@ -1,0 +1,47 @@
+#!/bin/sh
+# .routekit/git-hooks/pre-commit
+# Git pre-commit hook: runs gitleaks on staged files to block secret leaks.
+#
+# Installation (one-time, per clone):
+#   git config core.hooksPath .routekit/git-hooks
+#
+# To skip in an emergency (use sparingly):
+#   git commit --no-verify
+#
+# This hook is intentionally POSIX sh (not bash) for maximum portability.
+
+set -e
+
+GITLEAKS_CONFIG=".gitleaks.toml"
+
+# Check that gitleaks is available
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "[pre-commit] WARNING: gitleaks is not installed — secret scan skipped."
+  echo "[pre-commit] Install: brew install gitleaks  (macOS) or see https://github.com/gitleaks/gitleaks"
+  exit 0
+fi
+
+# Check that the config file exists
+if [ ! -f "$GITLEAKS_CONFIG" ]; then
+  echo "[pre-commit] WARNING: $GITLEAKS_CONFIG not found — running with default ruleset."
+  GITLEAKS_CONFIG=""
+fi
+
+# Run gitleaks against staged files only
+if [ -n "$GITLEAKS_CONFIG" ]; then
+  gitleaks protect --staged --config "$GITLEAKS_CONFIG" --exit-code 1
+else
+  gitleaks protect --staged --exit-code 1
+fi
+
+STATUS=$?
+
+if [ $STATUS -ne 0 ]; then
+  echo ""
+  echo "[pre-commit] gitleaks detected potential secrets in staged files."
+  echo "[pre-commit] Review the findings above before committing."
+  echo "[pre-commit] If this is a false positive, add an allowlist entry to .gitleaks.toml."
+  exit 1
+fi
+
+exit 0
