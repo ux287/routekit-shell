@@ -1,0 +1,249 @@
+name: CI
+
+on:
+  push:
+    branches: [main, staging]
+    # Skip CI when a push touches ONLY docs or meta/config files. Combined with
+    # [skip ci] in the rks_release bump commit (see git-release.mjs), this
+    # eliminates the ~30-40 redundant ~50min CI cycles per backlog chunk that
+    # we'd otherwise pay for PO/QA/ARCH frontmatter writes + meta config tweaks.
+    # See backlog.fix.ci-skips-release-bump-commits (Story A1) and
+    # backlog.fix.ci-skips-docs-and-config-only-commits (Story A2).
+    paths-ignore:
+      # Story A1 — release-bump commit case
+      - 'package.json'
+      - 'CHANGELOG.md'
+      - 'notes/research.public.**'
+      # Story A2 — docs-only writes by PO/QA/ARCH and meta/config tweaks
+      - 'notes/backlog.**'
+      - 'notes/research.**'
+      - 'notes/canon.**'
+      - 'notes/how-to.**'
+      - 'notes/scratch.**'         # defensive: scratch.* notes are gitignored today, kept for future-proofing
+      - '.rks/project.json'
+      - '.rks/active-scope.json'   # defensive: gitignored under .rks/* today, kept in case the ignore rule shifts
+  pull_request:
+    branches: [main, staging]
+    paths-ignore:
+      # Story A1
+      - 'package.json'
+      - 'CHANGELOG.md'
+      - 'notes/research.public.**'
+      # Story A2
+      - 'notes/backlog.**'
+      - 'notes/research.**'
+      - 'notes/canon.**'
+      - 'notes/how-to.**'
+      - 'notes/scratch.**'
+      - '.rks/project.json'
+      - '.rks/active-scope.json'
+  workflow_dispatch:
+    inputs:
+      run_e2e:
+        description: 'Run e2e tests'
+        required: false
+        default: 'false'
+  schedule:
+    - cron: '0 4 * * *'
+
+jobs:
+  # Story A5: short-circuit CI when github.sha has ALREADY succeeded in a prior
+  # CI run on any branch. The accumulated-FF-merge case (multi-commit push of
+  # already-verified content to main) defeats paths-ignore on its own — A1+A2
+  # only cover same-content single-commit pushes. This guard closes the
+  # remaining release-day waste (~50min per release).
+  #
+  # Safety: this job is FAIL-OPEN. Any error path (gh api failure, jq parse
+  # failure, missing $GITHUB_OUTPUT) must result in skip=false so downstream
+  # jobs run normally. Worst case we pay the redundant ~50min we were already
+  # paying. The only way the guard can incorrectly skip is if a prior run
+  # genuinely succeeded on the same SHA.
+  #
+  # Self-exclusion: filters out the CURRENT github.run_id so a re-triggered
+  # workflow doesn't see itself as "prior success" and skip itself into nothing.
+  #
+  # Workflow disambiguation: jq filters by name == "CI" so a green release-smoke
+  # or check-hooks-drift run on the same SHA doesn't trip the skip — those are
+  # different workflows with different contracts.
+  sha-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - name: Check prior CI success for github.sha
+        id: check
+        # continue-on-error is belt-and-suspenders — the bash below is
+        # already fail-open via explicit if-else, but if anything throws
+        # outside the script (e.g., env not set), this prevents the step
+        # from failing the job and leaves outputs.skip empty (which the
+        # downstream `if: ... != 'true'` correctly treats as "run").
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          CURRENT_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Always exit 0. Always set skip= output. Fail-open on every error path.
+          set +e
+
+          # gh api can fail (auth, rate limit, network). `|| true` ensures the
+          # command substitution always returns. Pagination note: default 30/run
+          # per page; for any single SHA the number of CI runs should be small
+          # (typically 1-3), so a single page is sufficient.
+          RESPONSE=$(gh api "repos/${REPO}/actions/runs?head_sha=${CURRENT_SHA}&status=success&exclude_pull_requests=true&per_page=30" 2>&1 || true)
+          GH_EXIT=$?
+
+          if [ "$GH_EXIT" -ne 0 ] || [ -z "$RESPONSE" ]; then
+            echo "Running CI: guard fail-open (gh api exit=$GH_EXIT, response empty)"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # jq filter:
+          #   - .workflow_runs is the array of runs
+          #   - select by name == "CI" (this workflow's name, not release-smoke/check-hooks-drift)
+          #   - exclude CURRENT_RUN_ID (self-exclusion)
+          #   - take first match
+          MATCH_JSON=$(echo "$RESPONSE" | jq -c --arg current_run_id "$CURRENT_RUN_ID" '
+            .workflow_runs
+            | map(select(.name == "CI" and (.id | tostring) != $current_run_id))
+            | first // empty
+          ' 2>/dev/null)
+          JQ_EXIT=$?
+
+          if [ "$JQ_EXIT" -ne 0 ]; then
+            echo "Running CI: guard fail-open (jq parse failed)"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "$MATCH_JSON" ] || [ "$MATCH_JSON" = "null" ]; then
+            echo "Running CI: no prior success for SHA $CURRENT_SHA"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PRIOR_ID=$(echo "$MATCH_JSON" | jq -r '.id')
+          PRIOR_BRANCH=$(echo "$MATCH_JSON" | jq -r '.head_branch')
+          echo "Skipping CI: same SHA $CURRENT_SHA already succeeded in run $PRIOR_ID on branch $PRIOR_BRANCH"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+
+  # Tier 1 (notes/research.2026.06.15.test-suite-bloat-audit-and-tier-redesign.md §6):
+  # The unit suite is sharded 2-way. Each shard runs ~half the test files
+  # alphabetically (vitest --shard=N/2 split). This was added after 4 consecutive
+  # CI failures (#1965–1968) where the single-job unit run blew the GHA runner's
+  # resource envelope (83-min wall clock + "lost communication" preemption).
+  # See the audit paper for Tier 2 (bloat audit) and Tier 3 (structural) followups.
+  #
+  # Failure diagnosis: `gh run view <runId> --log-failed` and search for the
+  # first `FAIL` marker. If BOTH shards die with "lost communication" the suite
+  # has grown again — reopen the audit paper and re-evaluate maxForks/sharding.
+  unit-tests:
+    runs-on: ubuntu-latest
+    needs: sha-guard
+    if: needs.sha-guard.outputs.skip != 'true'
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Verify guardrails hooks exist
+      run: |
+        if [ ! -d ".routekit/hooks" ]; then
+          echo "::error::FATAL: .routekit/hooks/ directory is missing!"
+          echo "This directory contains critical guardrails infrastructure."
+          echo "If this was intentional, this check must be updated."
+          exit 1
+        fi
+        echo "✓ Guardrails hooks directory present"
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run unit tests (shard ${{ matrix.shard }}/2)
+      env:
+        # Story B1: enable vitest --reporter=json passthrough in scripts/vitest-runner.mjs.
+        # The runner derives the output path from this env var (or generates a
+        # default under .rks/test-reports/). The JSON is uploaded as an
+        # artifact after the run, and a markdown top-10 is posted to
+        # $GITHUB_STEP_SUMMARY by the next step.
+        # Tier 1: per-shard suffix prevents the two matrix instances from clobbering each other's JSON.
+        ROUTEKIT_VITEST_JSON_OUTPUT: .rks/test-reports/vitest-unit-${{ github.run_id }}-shard${{ matrix.shard }}.json
+      run: node scripts/vitest-runner.mjs --timeout 3600000 --config vitest.config.unit.mjs --shard=${{ matrix.shard }}/2
+
+    - name: Post vitest timing summary
+      # Run on pass AND fail — timing data is useful even when tests are red.
+      # 5-min cap is a safety net against the script stalling on huge JSON
+      # reports which previously left the analyze step vulnerable to runner
+      # SIGTERM and silently dropping the $GITHUB_STEP_SUMMARY output.
+      if: always()
+      timeout-minutes: 5
+      run: node scripts/analyze-vitest-report.mjs .rks/test-reports/vitest-unit-${{ github.run_id }}-shard${{ matrix.shard }}.json
+
+    - name: Upload vitest JSON report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: vitest-unit-report-${{ github.run_id }}-shard${{ matrix.shard }}
+        path: .rks/test-reports/vitest-unit-${{ github.run_id }}-shard${{ matrix.shard }}.json
+        if-no-files-found: warn
+        retention-days: 14
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: [sha-guard, unit-tests]
+    if: |
+      needs.sha-guard.outputs.skip != 'true' && (github.ref == 'refs/heads/staging' || github.base_ref == 'staging')
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run mock/integration tests
+      run: npm run test:mock
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    needs: [sha-guard, unit-tests]
+    if: needs.sha-guard.outputs.skip != 'true' && vars.RKS_E2E_ENABLED != ''
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run e2e tests
+      run: npm run test:e2e
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        ROUTEKIT_LLM_PROVIDER: ${{ secrets.ROUTEKIT_LLM_PROVIDER }}

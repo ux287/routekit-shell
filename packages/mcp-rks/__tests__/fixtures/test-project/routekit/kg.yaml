@@ -1,0 +1,6 @@
+project:
+  name: test-project
+  description: Minimal test fixture for MCP contract tests
+stack:
+  runtime: node
+  framework: none

@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "rks-gov": {
+      "command": "node",
+      "args": [
+        "scripts/mcp/governance-server.mjs"
+      ],
+      "env": {
+        "ROUTEKIT_PROJECT_ID": "routekit-shell"
+      }
+    },
+    "rks": {
+      "command": "node",
+      "args": [
+        "packages/mcp-rks/bin/mcp-rks.mjs"
+      ],
+      "env": {
+        "ROUTEKIT_PROJECT_ROOT": "."
+      }
+    }
+  }
+}
