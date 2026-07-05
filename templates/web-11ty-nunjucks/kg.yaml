@@ -1,0 +1,55 @@
+stack: web-11ty-nunjucks
+status: official
+framework: eleventy-nunjucks
+runtime: node18
+description: Eleventy + Nunjucks stack for content-first static sites (Netlify-friendly).
+
+code_roots:
+  - src
+  - notes
+  - scripts
+
+codemap:
+  page_roots:
+    - src
+  component_roots:
+    - src/_includes/components
+    - src/_includes/layouts
+
+components:
+  eleventy_config:
+    path: .eleventy.js
+    description: Eleventy config (input/output dirs, passthrough, filters).
+  layout_base:
+    path: src/_includes/layouts/base.njk
+    description: Base layout template.
+  layout_home:
+    path: src/_includes/layouts/home.njk
+    description: Home layout template.
+  component_header:
+    path: src/_includes/components/header.njk
+    description: Header partial.
+  component_footer:
+    path: src/_includes/components/footer.njk
+    description: Footer partial.
+  styles_entry:
+    path: src/styles/site.css
+    description: Global styles entrypoint.
+
+content:
+  dendron_vault:
+    type: dendron
+    path: notes
+    schema: notes/root.schema.yml
+
+scripts:
+  dev: "npm run start"
+  build: "npm run build"
+  rag_init: "npm run rag:init"
+  rag_embed: "npm run rag:embed"
+  rag_query: "npm run rag:query"
+
+deploy:
+  netlify:
+    config: netlify.toml
+
