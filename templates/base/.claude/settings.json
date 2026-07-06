@@ -1,0 +1,350 @@
+{
+  "env": {
+    "ENABLE_TOOL_SEARCH": "true",
+    "RKS_GUARDRAILS": "on"
+  },
+  "permissions": {
+    "deny": [
+      "Read(**/.env*)",
+      "Read(**/.mcp.json)",
+      "Read(**/.dev.vars*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/secrets/**)",
+      "Read(**/credentials/**)",
+      "Read(**/.aws/**)",
+      "Read(**/.ssh/**)",
+      "Read(**/config/database.yml)",
+      "Read(**/config/credentials.json)",
+      "Read(**/.npmrc)",
+      "Read(**/.pypirc)",
+      "Read(**/credentials*)",
+      "Write(**/.env*)",
+      "Write(**/.mcp.json)",
+      "Write(**/secrets/**)",
+      "Write(**/.ssh/**)",
+      "Bash(grep*\\.env*)",
+      "Bash(rg*\\.env*)",
+      "Bash(cat*\\.env*)",
+      "Bash(grep*\\.mcp\\.json*)",
+      "Bash(rg*\\.mcp\\.json*)",
+      "Bash(cat*\\.mcp\\.json*)"
+    ],
+    "allow": [
+      "mcp__rks__rks_governor_init",
+      "mcp__rks__rks_project_get",
+      "mcp__rks__rks_preflight",
+      "mcp__rks__rks_rag_init",
+      "mcp__rks__rks_guardrails_on",
+      "mcp__rks__rks_guardrails_status",
+      "mcp__rks__rks_telemetry_query",
+      "mcp__rks__rks_telemetry_report",
+      "mcp__rks__rks_agent_run",
+      "mcp__rks__rks_agent_plan",
+      "mcp__rks__rks_agent_research",
+      "mcp__rks__rks_agent_git",
+      "mcp__rks__rks_agent_dendron",
+      "mcp__rks__rks_agent_telemetry",
+      "mcp__rks__rks_agent_validate_story",
+      "mcp__rks__rks_agent_external_research",
+      "mcp__rks__rks_agent_ship",
+      "mcp__rks__rks_agent_cycle_complete",
+      "mcp__rks__rks_agent_story",
+      "mcp__rks__rks_agent_lifecycle",
+      "mcp__rks__rks_agent_delivery",
+      "mcp__rks__rks_agent_recovery"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/guardrails-gate.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/guardrails-auto-enable.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "EnterPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-plan-to-backlog.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-read-to-agent.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/enforce-code-context.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-grep-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-glob-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-task-explore-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/enforce-orchestration.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/enforce-rag-discovery.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Grep|Glob|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/enforce-read-provenance.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/protect-system-files.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-edit-to-governor.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/enforce-targetfile-scope.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/enforce-plan-scope.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/enforce-architecture.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/enforce-dendron-note-creation.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__rks__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-raw-mcp-to-governor.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__rks__rks_validate_story",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-validate-story-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__rks__rks_git_commit|mcp__rks__rks_git_branch|mcp__rks__rks_checkout|mcp__rks__rks_git_merge|mcp__rks__rks_git_state|mcp__rks__rks_stash|mcp__rks__rks_restore|mcp__rks__rks_cherry_pick|mcp__rks__rks_tag",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-git-tools-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__rks__dendron_create_note|mcp__rks__dendron_edit_note|mcp__rks__dendron_read_note|mcp__rks__dendron_update_field|mcp__rks__dendron_fix_frontmatter|mcp__rks__dendron_validate_schema|mcp__rks__dendron_mark_implemented",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-dendron-tools-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__rks__rks_rag_query|mcp__rks__rks_kg_query",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-rag-tools-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-websearch-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-webfetch-to-governor.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-notebookedit-to-governor.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/redirect-bash-to-governor.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/block-git-during-off-rail.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/enforce-git-workflow.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/enforce-branch-workflow.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/enforce-rag-for-search.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/check-dependency-security.mjs"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__rks.*rag.*|mcp__rks.*orchestrator.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/track-rag-results.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__rks__rks_agent_run|mcp__rks__rks_agent_research|mcp__rks__rks_agent_validate_story|mcp__rks__rks_agent_git|mcp__rks__rks_agent_dendron|mcp__rks__rks_agent_telemetry|mcp__rks__rks_agent_external_research|mcp__rks__rks_agent_ship|mcp__rks__rks_agent_cycle_complete|mcp__rks__rks_agent_story|mcp__rks__rks_agent_delivery|mcp__rks__rks_agent_recovery",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/track-agent-provenance.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Grep|Glob|Bash|WebFetch|WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/monitor-context.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/track-write-telemetry.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/check-docs-sync.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/rag-embed-on-commit.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/guardrails-auto-enable.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/capture-plan-to-backlog.mjs"
+          }
+        ]
+      }
+    ]
+  }
+}
