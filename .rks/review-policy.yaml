@@ -1,0 +1,50 @@
+# Code Review Policy
+# Controls the behavior of rks_review agent-based code review
+
+enabled: true
+
+# Review model - uses a smaller/faster model for cost efficiency
+# Sonnet is sufficient for pattern matching and issue detection
+model: claude-sonnet-4-20250514
+
+# Verdict behavior
+# - block: Review must pass before merge proceeds
+# - warn: Log findings but allow merge
+# - skip: Disable review entirely
+verdictMode: warn
+
+# Categories that trigger BLOCK verdict
+blockCategories:
+  - enforcement_modification  # Changes to .routekit/hooks/ files
+  - security_issue           # Secrets, eval, injection patterns
+
+# Categories that trigger WARN verdict
+warnCategories:
+  - missing_error_handling   # No error/catch handling in new code
+  - test_coverage           # Code changes without test changes
+  - anti_patterns           # console.log, TODO, hardcoded values
+  - ac_coverage             # Diff may not fully implement AC
+
+# Files that always trigger enforcement_modification category
+enforcementPaths:
+  - .routekit/hooks/
+  - .rks/protected-files.yml
+  - .rks/review-policy.yaml
+  - .rks/scope-policy.yaml
+
+# Patterns that trigger security_issue category
+securityPatterns:
+  - "eval\\("
+  - "new Function\\("
+  - "process\\.env\\."  # Warn about env access in new code
+  - "password.*=.*['\"]"
+  - "api[_-]?key.*=.*['\"]"
+  - "secret.*=.*['\"]"
+
+# Patterns that trigger anti_patterns category
+antiPatterns:
+  - "console\\.log\\("
+  - "// TODO"
+  - "// FIXME"
+  - "// HACK"
+  - "debugger;"

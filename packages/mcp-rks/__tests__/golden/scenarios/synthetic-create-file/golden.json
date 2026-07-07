@@ -1,0 +1,11 @@
+{
+  "id": "synthetic-create-file",
+  "sourceRun": "synthetic",
+  "sourceStatus": "synthetic",
+  "projectId": "routekit-shell",
+  "capturedAt": "2026-02-23T00:00:00.000Z",
+  "description": "Synthetic golden scenario with a mix of search_replace and create_file actions. Tests both pattern validation and structural checks.",
+  "stepsCount": 2,
+  "problemId": null,
+  "synthetic": true
+}
