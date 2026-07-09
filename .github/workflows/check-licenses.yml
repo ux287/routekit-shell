@@ -1,0 +1,39 @@
+name: Check licenses
+
+# Dependency-license gate — fails the build when a dependency carries a DENIED (copyleft)
+# license. Deliberately stricter than AGPL compatibility to keep the codebase re-licensable
+# for the commercial/RKS-Pro surface. See .routekit/license-policy.yaml.
+#
+# Runs when dependencies or the gate itself change (deps can shift transitively via the
+# lockfile, so package-lock.json is a trigger).
+
+on:
+  push:
+    branches: [staging, main]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'packages/**/package.json'
+      - 'scripts/check-licenses.mjs'
+      - '.routekit/license-policy.yaml'
+      - '.github/workflows/check-licenses.yml'
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'packages/**/package.json'
+      - 'scripts/check-licenses.mjs'
+      - '.routekit/license-policy.yaml'
+      - '.github/workflows/check-licenses.yml'
+
+jobs:
+  check-licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Enforce dependency license policy
+        run: npm run check:licenses

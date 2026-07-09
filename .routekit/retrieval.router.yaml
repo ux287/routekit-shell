@@ -1,0 +1,35 @@
+priority:
+  canonical:
+    - "notes/decisions.*"
+    - "notes/specs.*"
+  deprioritize:
+    - "notes/root.*"
+    - "notes/scratch.*"
+    - "chat://**"
+    - "web://**"
+
+thresholds:
+  lexical_score_min: 0.55
+  semantic_score_min: 0.70
+  escalate_if_fewer_than_hits: 3
+  max_total_passages: 12
+  max_per_source: 6
+
+budget:
+  fs_first:  { time_ms: 250, k: 5 }
+  rag_first: { time_ms: 400, k: 6 }
+
+routing:
+  fs_triggers:
+    - regex: '(/[A-Za-z0-9._-]+)+'
+    - regex: '(ERR_[A-Z_]+|Traceback|TypeError|ORA-\d{5}|HTTP \d{3})'
+    - contains_any: ["function", "class", "module", "stack trace", "build failed"]
+  rag_triggers:
+    - contains_any: ["compare", "summarize", "where did we", "trade-offs", "pros and cons", "last week", "last month", "why"]
+    - min_words: 8
+
+canon_rules:
+  - when_path: "notes/decisions.*"
+    require_corroboration: false
+  - when_path: "notes/specs.*"
+    require_corroboration: false

@@ -1,0 +1,22 @@
+answering:
+  prefer_paths:
+    - "notes/decisions.*"
+    - "notes/specs.*"
+  forbid_sources:
+    - "notes/root.*"
+    - "notes/scratch.*"
+    - "chat://**"
+    - "web://**"
+  freshness_days: 90
+  fail_loud_if_weak: true
+  require_two_sources_for:
+    - "repo://prod/**"   # if you also map non-vault prod docs later
+
+formatting:
+  cite: "path#line_start-line_end"
+  max_tokens_answer: 600
+  include_trace: true
+
+diffs:
+  summarize_lines: 3
+  must_include_raw_diff: true
