@@ -1,0 +1,12 @@
+{
+  "name": "@routekit/mcp-figma-bridge",
+  "version": "0.2.0",
+  "type": "module",
+  "main": "src/server.mjs",
+  "scripts": {
+    "start": "node src/server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0"
+  }
+}

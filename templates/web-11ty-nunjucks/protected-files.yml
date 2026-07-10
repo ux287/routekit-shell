@@ -1,0 +1,13 @@
+protected:
+  - "node_modules/**"
+  - ".git/**"
+  - ".rks/**"
+  - ".env*"
+  - "package-lock.json"
+  - "pnpm-lock.yaml"
+  - "yarn.lock"
+  - ".netlify/**"
+
+projectProtected:
+  - "tools/routekit-shell/**"
+
