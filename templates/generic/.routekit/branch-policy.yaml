@@ -1,0 +1,29 @@
+# Branch workflow policy
+# Enforces feature branch workflow: branch from dev, merge back to dev
+
+# The base branch that feature branches should be created from
+base_branch: dev
+
+# Branches that are protected (no direct commits allowed)
+protected_branches:
+  - main
+  - dev
+
+# Pattern for valid feature branch names
+# Must match: feature/*, fix/*, refactor/*, docs/*, chore/*
+feature_branch_pattern: "^(feature|fix|refactor|docs|chore)/.+"
+
+# Require tests to pass before merging to dev
+require_tests_before_merge: true
+merge_test_command: "npm test"
+
+# Block direct commits to these branches (must use feature branches)
+block_direct_commits_to:
+  - main
+  - dev
+
+# Merges to main are blocked (use PRs via GitHub)
+block_merge_to_main: true
+
+# Allow these branches to bypass checks (for bootstrapping)
+exempt_branches: []
