@@ -1,0 +1,50 @@
+provenance_enforcement:
+  # Master switch
+  enabled: true
+
+  # block = enforce, warn = log but allow
+  mode: block
+
+  # How long RAG-sourced paths stay blessed
+  rag_path_ttl_turns: 3
+
+  # How long user-specified paths stay valid
+  user_path_ttl_turns: 5
+
+  # Exploration pattern detection
+  exploration_detection:
+    # Max sequential reads without RAG/user context
+    max_uncontextualized_reads: 2
+    # Time window for pattern detection
+    window_seconds: 60
+    # Score threshold for blocking
+    threshold: 3
+
+  # Always-allowed paths (runtime configs and infrastructure)
+  runtime_paths:
+    - ".routekit/*.yaml"
+    - ".routekit/hooks/*"
+    - ".rks/prompts/*"
+    - "package.json"
+    - "tsconfig.json"
+    - ".mcp.json"
+    - "CLAUDE.md"
+    - "README.md"
+    - "AGENTS.md"
+    - ".rks/*.yaml"
+    - ".rks/runs/*"
+    - ".rks/session/*"
+    - ".claude/*"
+    - "notes/backlog.*"
+    - "notes/research.*"
+    - "notes/how-to.*"
+
+  # Always require RAG (no exceptions)
+  strict_rag_paths:
+    - "/notes/"
+    - "/docs/"
+
+  # Telemetry
+  telemetry:
+    enabled: true
+    log_file: ".routekit/telemetry/read-provenance.log"
