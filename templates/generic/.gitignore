@@ -1,0 +1,20 @@
+node_modules/
+.DS_Store
+dist/
+scratch/
+tests/.tmp/
+
+# Dendron workspace files
+.dendron.port
+.dendron.ws
+notes/.dendron.cache.json
+# RKS runtime data (ignored)
+.rks/
+.rks/rag/embeds/
+
+# But track configuration files
+!.rks/*.yaml
+.env
+
+# Ephemeral session state (regenerated each session)
+.routekit/context-state.json

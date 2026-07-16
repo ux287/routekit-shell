@@ -1,0 +1,35 @@
+{
+  "projectId": "routekit-shell",
+  "task": "Synthetic golden scenario: Add project context logging and utility",
+  "planSummary": "Add logging to project context and create a new utility module",
+  "status": "executable",
+  "steps": [
+    {
+      "title": "Update loadProjectContext error handling",
+      "description": "Enhance the projectId validation in loadProjectContext",
+      "order": 1,
+      "id": "step-001",
+      "action": "search_replace",
+      "path": "packages/mcp-rks/src/project-context.mjs",
+      "content": null,
+      "edits": [
+        {
+          "search": "export async function loadProjectContext(projectId, repoRoot) {\n  if (!projectId) throw new Error(\"projectId is required\");\n  if (!repoRoot) throw new Error(\"repoRoot is required\");",
+          "replace": "export async function loadProjectContext(projectId, repoRoot) {\n  if (!projectId) throw new Error(\"projectId is required for context loading\");\n  if (!repoRoot) throw new Error(\"repoRoot is required for context loading\");"
+        }
+      ],
+      "command": null
+    },
+    {
+      "title": "Create context utility module",
+      "description": "Create a new utility for context caching helpers",
+      "order": 2,
+      "id": "step-002",
+      "action": "create_file",
+      "path": "packages/mcp-rks/src/utils/context-helpers.mjs",
+      "content": "// Context caching helpers\nexport function getCacheKey(projectId, root) {\n  return `${projectId}:${root || ''}`;\n}\n",
+      "edits": null,
+      "command": null
+    }
+  ]
+}
