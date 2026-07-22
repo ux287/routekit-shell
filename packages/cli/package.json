@@ -1,0 +1,18 @@
+{
+  "name": "@routekit/cli",
+  "version": "0.30.0",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "bin": {
+    "routekit": "./bin/routekit.js"
+  },
+  "scripts": {
+    "build": "echo '(no build step yet)'"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.4",
+    "glob": "^10.4.5",
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.8.1"
+  }
+}

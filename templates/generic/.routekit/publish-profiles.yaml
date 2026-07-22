@@ -1,0 +1,57 @@
+# Publish Profiles Configuration
+# Define what gets included/excluded when publishing to different remotes
+
+profiles:
+  full:
+    description: "Full project including RKS infrastructure"
+    exclude: []
+
+  docs-included:
+    description: "App + documentation, no RKS tooling"
+    exclude:
+      - ".routekit/"
+      - ".rks/"
+      - "CLAUDE.md"
+      - "projects/"
+
+  app-only:
+    description: "Clean client delivery - app code only"
+    exclude:
+      - ".routekit/"
+      - ".rks/"
+      - "notes/"
+      - "CLAUDE.md"
+      - "projects/"
+      - "*.md"
+      - "!README.md" # Keep README
+
+  notes-public:
+    description: "RKS system notes published with rks. namespace prefix"
+    exclude:
+      - ".routekit/"
+      - ".rks/"
+      - "packages/"
+      - "templates/"
+      - "CLAUDE.md"
+      - "projects/"
+    transforms:
+      - match: "notes/canon.**"
+        rename: "notes/rks.canon.{rest}"
+      - match: "notes/how-to.**"
+        rename: "notes/rks.how-to.{rest}"
+      - match: "notes/research.public.**"
+        rename: "notes/rks.research.public.{rest}"
+
+# Remote configurations
+# Map remotes to their default publish profile
+remotes:
+  rks-public-docs:
+    url: "git@github.com:routekit-hq/rks-docs.git"
+    profile: "notes-public"
+    branch: "main"
+
+  # Example:
+  # client:
+  #   url: "git@github.com:client-org/their-repo.git"
+  #   profile: "app-only"
+  #   branch: "main"
