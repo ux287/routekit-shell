@@ -1,0 +1,61 @@
+{
+  "id": "routekit-shell",
+  "root": ".",
+  "schemaVersion": 1,
+  "frameworkProject": true,
+  "createdAt": 1707868800000,
+  "updatedAt": 1707868800000,
+  "kgFile": "routekit/kg.yaml",
+  "notes": {
+    "vaultPath": "notes",
+    "dendronConfig": "dendron.yml"
+  },
+  "rag": {
+    "indexPath": ".rks/rag/index.lance",
+    "enabled": true
+  },
+  "kg": {
+    "configPath": "routekit/kg.yaml"
+  },
+  "llm": {
+    "providerEnvVar": "ROUTEKIT_LLM_PROVIDER",
+    "supportedProviders": [
+      "openai",
+      "anthropic",
+      "google"
+    ]
+  },
+  "skillDefaults": {},
+  "offRail": {
+    "enabled": true,
+    "roots": [
+      "vitest.config.*",
+      ".claude/*",
+      ".github/*",
+      "packages/*",
+      ".routekit/*",
+      "templates/*",
+      "scripts/*",
+      "src/agents/*",
+      "notes/*",
+      ".rks/*",
+      "routekit/*",
+      "LICENSE",
+      "CONTRIBUTOR-LICENSE.md",
+      "package.json",
+      ".mcp.json",
+      "tests/*",
+      ".gitignore",
+      "SECURITY.md",
+      ".env.test",
+      "CLAUDE.md",
+      "README.md",
+      "package-lock.json",
+      "pnpm-workspace.yaml",
+      "pnpm-lock.yaml",
+      ".mcp.json.example",
+      "plugins/*",
+      ".env.example"
+    ]
+  }
+}
