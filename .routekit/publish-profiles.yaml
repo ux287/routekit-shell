@@ -1,0 +1,134 @@
+# Publish Profiles — routekit-shell-core
+#
+# Controls what gets published when exporting to public remotes.
+# Uses an allowlist (include) rather than a denylist to be safe by default.
+#
+# Primary mechanism is the ALLOWLIST (include): anything not listed here never ships, so
+# privacy is by OMISSION — the safe default (a new private file/package can't leak because
+# nobody remembered to exclude it — it simply isn't on the allowlist).
+# `git archive` itself has no `--exclude`, so the `exclude` key below is applied as a JS
+# post-filter over the resolved include set (see applyExclude in publish.mjs) — a surgical
+# drop for cruft / private files that would otherwise ride in under a broader include glob.
+
+profiles:
+  # Docs-only profile (superseded by rks-public for the code release; kept for reference).
+  notes-public:
+    description: "Public rks documentation — canon.*, how-to.*, research.public.* namespaces"
+    include:
+      - "notes/canon.**"
+      - "notes/how-to.**"
+      - "notes/research.public.**"
+      - "notes/agents.**"
+      - "README.md"
+      - "LICENSE"
+      - "CONTRIBUTOR-LICENSE.md"
+      - "SECURITY.md"
+
+  # Public rks FRAMEWORK — a fully functional clone. A user can clone
+  # github.com/ux287/routekit-shell, `npm install`, and: read the public docs,
+  # kick off a child project, and dogfood rks development. The clone starts its
+  # knowledge graph from scratch (rks_rag_init) — it does NOT get the historical KG.
+  rks-public:
+    description: >-
+      Public rks framework: read public docs, init a child project, and dogfood rks
+      dev. Allowlist-only — .env/secrets, the RAG/LanceDB index, runtime session
+      state, the local project registry, and all private notes are kept out by omission.
+    # Static-export identity: rewrite the dev repo's identity to the public product name in the
+    # exported snapshot ONLY (targeted key/line edits — see normalizeExportIdentity in publish.mjs).
+    # The dev repo stays 'routekit-shell-core'; a cloner knows the product as 'routekit-shell'.
+    identity:
+      from: routekit-shell-core
+      to: routekit-shell
+    include:
+      # --- Framework code (EXPLICIT per-package allowlist, not bare packages/** — so a new
+      #     package, e.g. a marketing site or the whitepaper renderer, does NOT auto-leak;
+      #     it ships only if named here) ---
+      - "packages/cli/**"
+      - "packages/mcp-rks/**"
+      - "packages/hooks/**"
+      - "packages/design/**"
+      # telemetry-dashboard IS public — basic telemetry / cost understanding is part of the
+      # rks-core value prop — but its marketing decks (src/presentations/**) are dropped by
+      # the exclude post-filter below.
+      - "packages/telemetry-dashboard/**"
+      - "scripts/**"
+      - "templates/**"
+      - "src/**"
+      - "config/**"
+      - "guardrails/**"
+      # --- Harness: required to run rks (SCOPED — never bare .rks/ .claude/ .routekit/,
+      #     which also hold runtime state / the RAG index) ---
+      - "CLAUDE.md"
+      - "AGENTS.md"
+      - ".claude/skills/**"
+      - ".claude/agents/**"
+      - ".claude/settings.json"
+      - ".mcp.json.example"
+      - ".rks/prompts/**"
+      - ".rks/agents.yaml"
+      - ".rks/required-hooks.yaml"
+      - ".rks/review-policy.yaml"
+      - ".rks/project.json"
+      - ".routekit/hooks/**"
+      - ".routekit/hooks-manifest.json"
+      # Canonical skill inventory. MUST ship: preflight's core_skills check reads it, so a mirror
+      # clone without it cannot detect a missing skill — which is precisely the machine the
+      # self-sync wipe was found on. This list is an ALLOWLIST and the only other .routekit glob is
+      # `*.yaml`, so a .json file that is not named here silently does not ship.
+      - ".routekit/skills-manifest.json"
+      - ".routekit/agents/**"
+      - ".routekit/git-hooks/**"
+      - ".routekit/*.yaml"
+      # --- Dev: run the suite + CI, dogfood rks itself ---
+      - "tests/**"
+      - ".github/workflows/**"
+      - "package.json"
+      - "package-lock.json"
+      # (pnpm-workspace.yaml intentionally NOT shipped — this repo is npm-canonical;
+      #  shipping it would signal pnpm to a cloner. See fresh-clone-bootstrap story.)
+      - "dendron.yml"
+      # KG file — loadProjectContext hard-requires it; a fresh clone needs it to pass preflight.
+      # Surgical SINGLE-file include (NOT routekit/** — that would leak the RAG index + registry).
+      - "routekit/kg.yaml"
+      - "vitest.config.*"
+      - ".nvmrc"
+      - ".eslintrc.cjs"
+      - ".prettierrc"
+      - ".prettierignore"
+      - ".markdownlint.json"
+      - ".gitignore"
+      - ".gitleaks.toml"
+      - ".env.example"
+      # --- Public docs ---
+      - "notes/canon.**"
+      - "notes/how-to.**"
+      - "notes/agents.**"
+      - "notes/research.public.**"
+      - "notes/playbooks.**"
+      - "README.md"
+      - "LICENSE"
+      - "SECURITY.md"
+      - "CONTRIBUTOR-LICENSE.md"
+    # Post-filter denylist. `git archive` has no --exclude, so this is applied over the
+    # include set we resolve ourselves (see applyExclude in publish.mjs). It drops editor
+    # backup cruft and private dev-only tooling that would otherwise ride in under the
+    # broad packages/** / scripts/** / templates/** include globs.
+    exclude:
+      - "**/*.bak"
+      - "**/*.bak.*"
+      - "**/*.orig"
+      - "**/*~"
+      - "scripts/publish-to-ux287.mjs"
+      # --- Marketing / content surface — rks-core-only, NEVER public ---
+      # The presentation decks live inside the (public) telemetry-dashboard; drop just the decks.
+      - "packages/*/src/presentations/**"
+      # Content packages (belt-and-suspenders: also not on the include allowlist above).
+      - "packages/whitepaper/**"
+      - "packages/marketing-site/**"
+      - "packages/marketing/**"
+
+remotes:
+  rks-public:
+    url: "git@github.com:ux287/routekit-shell.git"
+    profile: "rks-public"
+    branch: "main"
