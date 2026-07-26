@@ -1,0 +1,39 @@
+{
+  "mcpServers": {
+    "routekit-rag-__slug__": {
+      "command": "node", 
+      "args": ["scripts/mcp/rag-server.mjs"],
+      "env": {}
+    },
+    "routekit-playwright-__slug__": {
+      "command": "npx",
+      "args": ["@playwright/mcp"],
+      "env": {}
+    },
+    "routekit-dendron-__slug__": {
+      "command": "node",
+      "args": ["scripts/mcp/dendron-server.mjs"],
+      "env": {}
+    },
+    "routekit-governance-__slug__": {
+      "command": "node",
+      "args": ["scripts/mcp/governance-server.mjs"],
+      "env": {}
+    },
+    "routekit-contextual-__slug__": {
+      "command": "node",
+      "args": ["scripts/mcp/contextual-mcp-wrapper.mjs"],
+      "env": {}
+    },
+    "figma-dev-mode-mcp-server": {
+      "command": "http",
+      "transport": "http",
+      "url": "http://127.0.0.1:3845/mcp"
+    },
+    "browsermcp": {
+      "command": "npx",
+      "args": ["-y", "browsermcp"],
+      "env": {}
+    }
+  }
+}
