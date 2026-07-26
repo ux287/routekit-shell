@@ -1,0 +1,106 @@
+# Post-release smoke verification.
+#
+# Fires ONLY on tag push matching v*.*.* (release tags created by rks_release).
+# Builds a LanceDB index from a synthetic fixture vault using the PRODUCTION
+# scripts/rag/embed.mjs (the artifact we just released), then asserts the
+# index has every expected content_type and is non-trivial in size.
+#
+# A green run proves the release artifact actually works end-to-end against
+# the storage contract, not just that unit tests pass. A red run posts a
+# commit comment on the tag's commit referencing the failed assertion so the
+# release-day operator sees the failure without having to scrub the Actions
+# UI.
+#
+# Per the v0.20.15 root cause that motivated this workflow:
+#   1. ROUTEKIT_PROJECT_ROOT is set EXPLICITLY to the fixture vault absolute
+#      path. embed.mjs uses this to derive the LanceDB filename via
+#      path.basename(projectRoot) → ${basename}.lancedb. The integration test
+#      MUST use the same derivation to query the DB (else the test queries a
+#      different path than embed wrote to).
+#   2. ROUTEKIT_RAG_EMBEDDINGS_MODE is set EXPLICITLY to 'model' so the smoke
+#      exercises the production code path, not a degenerate hash-only mode
+#      that could silently mask a broken model load.
+#
+# Story: backlog.feat.post-release-smoke-verification
+name: Release Smoke
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    # Cap wall-clock per ARCH ask: full reindex of the 6-note fixture vault
+    # completes in <2 min on local; allow generous headroom for CI cold start
+    # and model load. >15 min indicates a hung process — fail fast.
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # Required for posting the on-failure commit comment via gh api.
+      pull-requests: write
+      issues: write
+    env:
+      # ARCH-pinned: explicit project-root resolution. Use $GITHUB_WORKSPACE so
+      # the fixture vault is found at the same absolute path embed.mjs and the
+      # assertion test both derive from. DO NOT remove or rename without
+      # updating tests/integration/release-smoke.workflow.test.mjs in lockstep.
+      ROUTEKIT_PROJECT_ROOT: ${{ github.workspace }}/tests/integration/fixtures/release-smoke-vault
+      # ARCH-pinned: exercise the production model path, not the degenerate
+      # hash mode. A release whose model path is broken must smoke-red.
+      ROUTEKIT_RAG_EMBEDDINGS_MODE: model
+      # Force tests/integration/release-smoke.workflow.test.mjs to FAIL (not skip) when
+      # the fixture LanceDB is absent. Without this, the test self-skips when
+      # the DB is missing — necessary for the regular test:mock CI integration
+      # suite, which sweeps all tests/integration/*.test.mjs without running
+      # embed.mjs first. In THIS workflow embed must have produced a DB; if it
+      # didn't, the workflow MUST go red, not green-via-skip.
+      RKS_RELEASE_SMOKE_REQUIRE_DB: '1'
+      # Available to gh subcommands in the post-failure comment step.
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Embed fixture vault via production embed.mjs
+        id: embed
+        # Invoke the PRODUCTION embed script (not a duplicate). The literal
+        # `node scripts/rag/embed.mjs` is pinned by tests/unit/release-smoke-workflow.test.mjs
+        # — if the path changes, both must move together.
+        run: |
+          set -euo pipefail
+          echo "ROUTEKIT_PROJECT_ROOT=$ROUTEKIT_PROJECT_ROOT"
+          echo "ROUTEKIT_RAG_EMBEDDINGS_MODE=$ROUTEKIT_RAG_EMBEDDINGS_MODE"
+          node scripts/rag/embed.mjs
+
+      - name: Assert smoke contract (content_types + counts)
+        id: assert
+        run: npx vitest run tests/integration/release-smoke.workflow.test.mjs --reporter=default
+
+      - name: Post commit comment on smoke failure
+        if: failure()
+        env:
+          TAG_SHA: ${{ github.sha }}
+          TAG_REF: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        # AC6: on failure, post a comment to the tag's commit via gh api
+        # `repos/{owner}/{repo}/commits/{sha}/comments`. Source-grep pinned by
+        # tests/unit/release-smoke-workflow.test.mjs.
+        run: |
+          set -euo pipefail
+          BODY=$(printf 'Release smoke failed for tag **%s** at commit %s.\n\n- Embed step outcome: %s\n- Assert step outcome: %s\n- Full log: %s\n\nFix the underlying classifier/embed/storage contract regression before promoting the next release.' "$TAG_REF" "$TAG_SHA" "${{ steps.embed.outcome }}" "${{ steps.assert.outcome }}" "$RUN_URL")
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${{ github.repository }}/commits/${TAG_SHA}/comments" \
+            -f body="$BODY"
