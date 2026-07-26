@@ -1,0 +1,61 @@
+node_modules/
+.DS_Store
+dist/
+scratch/
+notes/scratch.*
+tests/.tmp/
+.tmp-e2e-*/
+# Transient replan scratch dirs. rks generates these itself, and without this line its own clean-tree
+# precondition trips over its own garbage — and the guardrails-off auto-ship SWEEPS THEM INTO COMMITS
+# (it has done so twice).
+.tmp-replan-*/
+
+# Dendron workspace files
+.dendron.port
+.dendron.ws
+notes/.dendron.cache.json
+# .rks/ — ignore runtime state, track project config
+# Use glob (*) not directory (/) so git enters the dir and respects negations
+.rks/*
+!.rks/project.json
+!.rks/agents.yaml
+!.rks/required-hooks.yaml
+!.rks/review-policy.yaml
+!.rks/prompts/
+# Runtime subdirectories (always ignored)
+.rks/rag/
+.rks/runs/
+.rks/session/
+.rks/state/
+.rks/telemetry/
+.rks/backups/
+.rks/approvals/
+.env*
+# ...but DO ship the template. publish() builds the snapshot with `git add -A`, which obeys
+# this file — without the negation, `.env.example` gets silently dropped from the public repo.
+!.env.example
+
+# Editor / tool backup cruft — never track these (release-hardening)
+*.bak*
+*.orig
+*~
+
+# MCP server config with tokens (use user scope or template instead)
+# /.mcp.json
+
+# Ephemeral session state (regenerated each session)
+.routekit/context-state.json
+.routekit/telemetry/
+.routekit/learning/
+routekit/telemetry/
+projects/index.jsonl
+.claude/scheduled_tasks.lock
+
+# RouteKit guardrails backup directory
+hooks.bak/
+
+# Project registry (local machine state, not portable)
+projects/index.jsonl
+.worktale/
+snacks-11ty-netlify
+

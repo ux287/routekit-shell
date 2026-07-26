@@ -1,0 +1,331 @@
+{
+  "env": {
+    "ENABLE_TOOL_SEARCH": "true",
+    "RKS_GUARDRAILS": "on"
+  },
+  "permissions": {
+    "allow": [
+      "mcp__rks__rks_guardrails_on",
+      "mcp__rks__rks_guardrails_status"
+    ],
+    "deny": [
+      "Read(**/.env*)",
+      "Read(**/.mcp.json)",
+      "Read(**/.dev.vars*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/secrets/**)",
+      "Read(**/credentials/**)",
+      "Read(**/.aws/**)",
+      "Read(**/.ssh/**)",
+      "Read(**/config/database.yml)",
+      "Read(**/config/credentials.json)",
+      "Read(**/.npmrc)",
+      "Read(**/.pypirc)",
+      "Read(**/credentials*)",
+      "Write(**/.env*)",
+      "Write(**/.mcp.json)",
+      "Write(**/secrets/**)",
+      "Write(**/.ssh/**)",
+      "Bash(grep*\\.env*)",
+      "Bash(rg*\\.env*)",
+      "Bash(cat*\\.env*)",
+      "Bash(grep*\\.mcp\\.json*)",
+      "Bash(rg*\\.mcp\\.json*)",
+      "Bash(cat*\\.mcp\\.json*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__rks.*rag.*|mcp__rks.*orchestrator.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/track-rag-results.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__rks__rks_agent_run|mcp__rks__rks_agent_research|mcp__rks__rks_agent_validate_story|mcp__rks__rks_agent_git|mcp__rks__rks_agent_dendron|mcp__rks__rks_agent_telemetry|mcp__rks__rks_agent_external_research|mcp__rks__rks_agent_ship|mcp__rks__rks_agent_cycle_complete|mcp__rks__rks_agent_story|mcp__rks__rks_agent_delivery|mcp__rks__rks_agent_recovery",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/system/track-agent-provenance.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/system/rag-embed-on-commit.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/system/guardrails-auto-enable.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Grep|Glob|Bash|WebFetch|WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/monitor-context.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/check-docs-sync.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/system/track-write-telemetry.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/write/capture-plan-to-backlog.mjs"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/system/guardrails-gate.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/system/guardrails-auto-enable.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "EnterPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/write/redirect-plan-to-backlog.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/redirect-read-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/redirect-grep-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/redirect-glob-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/redirect-task-explore-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/enforce-orchestration.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/enforce-rag-discovery.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Grep|Glob|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/enforce-read-provenance.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/write/redirect-edit-to-governor.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/system/enforce-targetfile-scope.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/write/enforce-plan-scope.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/enforce-architecture.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/enforce-dendron-note-creation.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__rks__rks_validate_story",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/write/redirect-validate-story-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__rks__rks_git_commit|mcp__rks__rks_git_branch|mcp__rks__rks_checkout|mcp__rks__rks_git_merge|mcp__rks__rks_git_state|mcp__rks__rks_stash|mcp__rks__rks_restore|mcp__rks__rks_cherry_pick|mcp__rks__rks_tag",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/write/redirect-git-tools-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__rks__dendron_create_note|mcp__rks__dendron_edit_note|mcp__rks__dendron_read_note|mcp__rks__dendron_update_field|mcp__rks__dendron_fix_frontmatter|mcp__rks__dendron_validate_schema|mcp__rks__dendron_mark_implemented",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/write/redirect-dendron-tools-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__rks__rks_rag_query|mcp__rks__rks_kg_query",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/redirect-rag-tools-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__rks__rks_staging_merge|mcp__rks__rks_release",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/write/enforce-staging-release-governor.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__github__create_or_update_file|mcp__github__push_files|mcp__github__merge_pull_request|mcp__github__create_issue|mcp__github__update_issue|mcp__github__add_issue_comment",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/write/redirect-github-tools-to-governor.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/redirect-websearch-to-agent.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/redirect-webfetch-to-governor.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/write/redirect-notebookedit-to-governor.mjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/write/redirect-bash-to-governor.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/system/block-git-during-off-rail.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/write/enforce-git-workflow.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/write/enforce-branch-workflow.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/enforce-rag-for-search.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.routekit/hooks/read/check-dependency-security.mjs"
+          }
+        ]
+      }
+    ]
+  }
+}
