@@ -1,0 +1,42 @@
+# Dependency Security Policy for RouteKit Shell
+# Validates npm install/add commands for security
+
+# Enable/disable dependency checking
+enabled: true
+
+# Check npm install commands
+check_npm_install: true
+
+# Run npm audit on install
+run_audit: true
+
+# Audit level threshold (info, low, moderate, high, critical)
+# Only report vulnerabilities at or above this level
+audit_level: high
+
+# Block installs when vulnerabilities found
+# Default: false (warn only)
+block_on_vulnerability: false
+
+# Check for major version updates
+check_major_versions: true
+
+# Packages that are explicitly blocked
+# These will always block installation
+blocked_packages: []
+  # Example:
+  # - event-stream  # Known compromised package
+  # - flatmap-stream
+
+# Allowed licenses (empty = allow all)
+# If set, only packages with these licenses will be allowed
+allowed_licenses: []
+  # Example:
+  # - MIT
+  # - Apache-2.0
+  # - ISC
+  # - BSD-3-Clause
+
+# Skip checks for these package patterns
+skip_packages:
+  - "@types/*"  # Type definitions don't run code
