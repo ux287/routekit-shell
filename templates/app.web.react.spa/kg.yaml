@@ -1,0 +1,35 @@
+stack: app.web.react.spa
+framework: vite-react
+runtime: node22
+status: official
+description: Minimal React + Vite + TypeScript + Tailwind SPA starter with client-side routing.
+code_roots:
+  - src
+components:
+  app_shell:
+    path: src/main.tsx
+    description: React entry — wraps <App/> in BrowserRouter.
+  app_router:
+    path: src/App.tsx
+    description: App shell — navigation + client-side <Routes>. Register new pages here.
+  pages:
+    path: src/pages
+    description: Route page components (Home, About). Add more and wire them in App.tsx.
+  ui_primitives:
+    path: src/components/ui
+    description: Small UI primitives (button, card, input, label, separator).
+content:
+  dendron_vault:
+    type: dendron
+    path: notes
+    schema: notes/root.schema.yml
+design_tokens:
+  tailwind_theme:
+    file: tailwind.config.js
+  globals_css:
+    file: src/styles/globals.css
+scripts:
+  dev: "npm run dev"
+  build: "npm run build"
+  preview: "npm run preview"
+  test: "npm run test"
