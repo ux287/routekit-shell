@@ -1,0 +1,6 @@
+version: 1
+vaults:
+  - fsPath: notes
+config:
+  useFMTitle: true
+  noLegacyNoteRef: true

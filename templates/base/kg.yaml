@@ -1,0 +1,4 @@
+name: base
+version: 0.1.0
+description: Base RKS template for project initialization
+stack: base
