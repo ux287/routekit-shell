@@ -1,0 +1,84 @@
+{
+  "id": "routekit-shell",
+  "root": ".",
+  "schemaVersion": 1,
+  "frameworkProject": true,
+  "createdAt": 1707868800000,
+  "updatedAt": 1707868800000,
+  "kgFile": "routekit/kg.yaml",
+  "notes": {
+    "vaultPath": "notes",
+    "dendronConfig": "dendron.yml"
+  },
+  "rag": {
+    "indexPath": ".rks/rag/routekit-shell.lancedb",
+    "enabled": true,
+    "fidelityCeiling": "full"
+  },
+  "kg": {
+    "configPath": "routekit/kg.yaml"
+  },
+  "llm": {
+    "providerEnvVar": "ROUTEKIT_LLM_PROVIDER",
+    "supportedProviders": [
+      "openai",
+      "anthropic",
+      "google"
+    ]
+  },
+  "skillDefaults": {},
+  "fetchRaw": {
+    "mode": "allowlist",
+    "allowedHosts": [
+      "code.claude.com",
+      "docs.claude.com",
+      "docs.anthropic.com",
+      "github.com",
+      "docs.github.com",
+      "api.github.com",
+      "raw.githubusercontent.com",
+      "objects.githubusercontent.com",
+      "registry.npmjs.org",
+      "www.npmjs.com",
+      "nodejs.org",
+      "developer.mozilla.org",
+      "modelcontextprotocol.io",
+      "spec.modelcontextprotocol.io"
+    ]
+  },
+  "offRail": {
+    "enabled": true,
+    "roots": [
+      "vitest.config.*",
+      ".claude/*",
+      ".github/*",
+      "packages/*",
+      ".routekit/*",
+      "templates/*",
+      "scripts/*",
+      "src/agents/*",
+      "notes/*",
+      ".rks/*",
+      "routekit/*",
+      "LICENSE",
+      "CLA.md",
+      "CONTRIBUTING.md",
+      "NOTICE",
+      "package.json",
+      ".mcp.json",
+      "tests/*",
+      ".gitignore",
+      "SECURITY.md",
+      ".env.test",
+      "CLAUDE.md",
+      "CHANGELOG.md",
+      "README.md",
+      "package-lock.json",
+      "pnpm-workspace.yaml",
+      "pnpm-lock.yaml",
+      ".mcp.json.example",
+      "plugins/*",
+      ".env.example"
+    ]
+  }
+}

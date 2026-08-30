@@ -1,0 +1,208 @@
+# Publish Profiles — routekit-shell-core
+#
+# Controls what gets published when exporting to public remotes.
+# Uses an allowlist (include) rather than a denylist to be safe by default.
+#
+# Primary mechanism is the ALLOWLIST (include): anything not listed here never ships, so
+# privacy is by OMISSION — the safe default (a new private file/package can't leak because
+# nobody remembered to exclude it — it simply isn't on the allowlist).
+# `git archive` itself has no `--exclude`, so the `exclude` key below is applied as a JS
+# post-filter over the resolved include set (see applyExclude in publish.mjs) — a surgical
+# drop for cruft / private files that would otherwise ride in under a broader include glob.
+
+profiles:
+  # Public rks FRAMEWORK — a fully functional clone. A user can clone
+  # github.com/ux287/routekit-shell, `npm install`, and: read the public docs,
+  # kick off a child project, and dogfood rks development. The clone starts its
+  # knowledge graph from scratch (rks_rag_init) — it does NOT get the historical KG.
+  rks-public:
+    description: >-
+      Public rks framework: read public docs, init a child project, and dogfood rks
+      dev. Allowlist-only — .env/secrets, the RAG/LanceDB index, runtime session
+      state, the local project registry, and all private notes are kept out by omission.
+    # Static-export identity: rewrite the dev repo's identity to the public product name in the
+    # exported snapshot ONLY (targeted key/line edits — see normalizeExportIdentity in publish.mjs).
+    # The dev repo stays 'routekit-shell-core'; a cloner knows the product as 'routekit-shell'.
+    identity:
+      from: routekit-shell-core
+      to: routekit-shell
+    include:
+      # --- Framework code (EXPLICIT per-package allowlist, not bare packages/** — so a new
+      #     package, e.g. a marketing site or the whitepaper renderer, does NOT auto-leak;
+      #     it ships only if named here) ---
+      - "packages/cli/**"
+      - "packages/mcp-rks/**"
+      - "packages/rag/**"
+      - "packages/telemetry/**"
+      - "packages/hooks/**"
+      - "packages/design/**"
+      # telemetry-dashboard IS public — basic telemetry / cost understanding is part of the
+      # rks-core value prop — but its marketing decks (src/presentations/**) are dropped by
+      # the exclude post-filter below.
+      - "packages/telemetry-dashboard/**"
+      - "scripts/**"
+      - "templates/**"
+      - "src/**"
+      - "config/**"
+      - "guardrails/**"
+      # --- Harness: required to run rks (SCOPED — never bare .rks/ .claude/ .routekit/,
+      #     which also hold runtime state / the RAG index) ---
+      - "CLAUDE.md"
+      - "AGENTS.md"
+      - ".claude/skills/**"
+      - ".claude/agents/**"
+      - ".claude/settings.json"
+      - ".mcp.json.example"
+      - ".rks/prompts/**"
+      - ".rks/agents.yaml"
+      - ".rks/required-hooks.yaml"
+      - ".rks/review-policy.yaml"
+      - ".rks/project.json"
+      - ".routekit/hooks/**"
+      - ".routekit/hooks-manifest.json"
+      # Canonical skill inventory. MUST ship: preflight's core_skills check reads it, so a mirror
+      # clone without it cannot detect a missing skill — which is precisely the machine the
+      # self-sync wipe was found on. This list is an ALLOWLIST and the only other .routekit glob is
+      # `*.yaml`, so a .json file that is not named here silently does not ship.
+      - ".routekit/skills-manifest.json"
+      - ".routekit/agents/**"
+      - ".routekit/git-hooks/**"
+      - ".routekit/*.yaml"
+      # --- Dev: run the suite + CI, dogfood rks itself ---
+      - "tests/**"
+      - ".github/workflows/**"
+      - "package.json"
+      - "package-lock.json"
+      # (pnpm-workspace.yaml intentionally NOT shipped — this repo is npm-canonical;
+      #  shipping it would signal pnpm to a cloner. See fresh-clone-bootstrap story.)
+      - "dendron.yml"
+      # KG file — loadProjectContext hard-requires it; a fresh clone needs it to pass preflight.
+      # Surgical SINGLE-file include (NOT routekit/** — that would leak the RAG index + registry).
+      - "routekit/kg.yaml"
+      - "vitest.config.*"
+      - ".nvmrc"
+      - ".eslintrc.cjs"
+      - ".prettierrc"
+      - ".prettierignore"
+      - ".markdownlint.json"
+      - ".gitignore"
+      - ".gitleaks.toml"
+      - ".env.example"
+      # --- Public docs ---
+      # notes/public.** is the actual public-facing library (9 notes: public.canon.* and
+      # public.guide.*). It was on NO allowlist, so it shipped nothing, while notes/canon.**
+      # — which it was written to supersede — is what reached the mirror.
+      - "notes/public.**"
+      # REMOVED: notes/canon.** (3 of its 5 notes are superseded duplicates of public.canon.*,
+      # two with byte-identical desc frontmatter), notes/research.public.** (matches nothing and
+      # CANNOT ever match — the documented convention is research.YYYY.MM.DD.*, so segment 2 is
+      # a four-digit year and can never be the literal "public"), and notes/agents.** (matches
+      # nothing; a vestige of when agent prompts lived in the vault, now in .rks/prompts/**).
+      #
+      # EXPLICIT per-file how-to list, NOT notes/how-to.** — 41 of the 50 how-to notes failed
+      # the publish audit. Privacy is by OMISSION (see header, line 7): under a glob every new
+      # how-to note ships unless someone remembers to exclude it, which inverts this file's own
+      # safety posture. CONSTRAINT: these are glob-free entries. publish.mjs adds a glob-free
+      # include AS THE PATTERN STRING and applyExclude tests that string, not its member files.
+      # Single FILES are safe (each resolves to itself). NEVER add a glob-free DIRECTORY here —
+      # git archive would expand it recursively and every file under it would bypass applyExclude.
+      - "notes/how-to.story-lifecycle.md"
+      - "notes/how-to.write-backlog-stories.md"
+      - "notes/how-to.test-tiers.e2e-invocation.md"
+      - "notes/how-to.project-attach.md"
+      - "notes/how-to.child-project-kickoff.md"
+      - "notes/how-to.golden-path.md"
+      - "notes/how-to.rks.md"
+      - "notes/how-to.branch-topology.md"
+      - "notes/how-to.dendron-note-creation.md"
+      # OPEN DECISION: recommended for removal pending an audit — 6 files, never reviewed, same
+      # vintage as the how-to corpus that returned 80% stale. Left in place until the owner rules.
+      - "notes/playbooks.**"
+      # Dendron vault root — ship it committed so a fresh mirror clone's Dendron vault load
+      # does not regenerate these into an untracked/dirty tree (backlog.fix.clean-clone-*).
+      - "notes/root.md"
+      - "notes/root.schema.yml"
+      - "README.md"
+      - "LICENSE"
+      - "SECURITY.md"
+      # CONTRIBUTOR-LICENSE.md was renamed to CLA.md by backlog.feat.licensing-docs-agpl-sync.
+      # These four may be allowlisted BEFORE that story lands, naming files not yet on disk.
+      # That is intended and harmless — the remote is disarmed (enabled: false) and an allowlist
+      # entry for a missing file resolves to nothing. Do NOT "fix" this by reverting: doing so
+      # silently drops the licensing docs from the first armed publish.
+      # PULL_REQUEST_TEMPLATE.md is NOT covered by .github/workflows/** and needs its own entry.
+      - "CLA.md"
+      - "CONTRIBUTING.md"
+      - "NOTICE"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+    # Post-filter denylist. `git archive` has no --exclude, so this is applied over the
+    # include set we resolve ourselves (see applyExclude in publish.mjs). It drops editor
+    # backup cruft and private dev-only tooling that would otherwise ride in under the
+    # broad packages/** / scripts/** / templates/** include globs.
+    exclude:
+      - "**/*.bak"
+      - "**/*.bak.*"
+      - "**/*.orig"
+      - "**/*~"
+      - "scripts/publish-to-ux287.mjs"
+      # --- Marketing / content surface — rks-core-only, NEVER public ---
+      # The presentation decks live inside the (public) telemetry-dashboard; drop just the decks.
+      - "packages/*/src/presentations/**"
+      # Content packages (belt-and-suspenders: also not on the include allowlist above).
+      - "packages/whitepaper/**"
+      - "packages/marketing-site/**"
+      - "packages/marketing/**"
+      #
+      # The ten entries below fall into FOUR groups. The groups are NOT interchangeable —
+      # each has a distinct justification. Do not collapse or reorder them.
+      #
+      # GROUP 1 — closes the deck-COPY leak. The entry above drops the deck SOURCE, but the
+      # copy is embedded verbatim in test files that the broad tests/** include allowlists and
+      # nothing excluded. What would have shipped: hero and quote copy, close-slide copy, deck
+      # titles, act headlines, origin-story beats including a named person, the titles of five
+      # unpublished private notes, and a plain-English description of a cover-neutrality tactic.
+      - "tests/unit/presentation-*.test.mjs"
+      - "tests/unit/dashboard-nav-shell.test.mjs"
+      - "tests/unit/marketing-site-scaffold.test.mjs"
+      # GROUP 2 — defense in depth. packages/*/src/presentations/** is anchored at ^packages/,
+      # so relocating the decks out of packages/ would silently slip it. These two do not care.
+      - "**/presentations/**"
+      - "src/presentations/**"
+      # GROUP 3 — the whitepaper surface. .claude/skills/whitepaper/SKILL.md runs
+      # `node packages/whitepaper/src/cli.mjs`, and packages/whitepaper/** is excluded above —
+      # so the mirror would ship a skill whose executable is deliberately absent. The two test
+      # files are tests for that same absent package. Excluded rather than allowed, so the
+      # publish tripwire can assert ZERO matches with no permitted exception.
+      - ".claude/skills/whitepaper/**"
+      - "tests/unit/whitepaper.test.mjs"
+      - "tests/unit/whitepaper-skill.test.mjs"
+      # GROUP 4 — client-engagement slug. PENDING OWNER CONFIRMATION, not settled. These embed
+      # a deck path carrying a named client engagement in planner FIXTURE strings. Their own
+      # paths do not match the tripwire regex, so nothing automated catches them. A client name
+      # plus an engagement topic is a confidentiality matter, not an embarrassment.
+      # NOTE: tests/unit/planner-structural-degeneracy-real.test.mjs was WRONGLY named as an
+      # offender in review and is deliberately NOT excluded — it carries only generic fixture
+      # paths (repro-deck.html, a.html) and excluding it would drop a real regression test.
+      - "tests/unit/planner-note-step-degeneracy.test.mjs"
+      - "tests/unit/planner-dropped-step-diagnostics.test.mjs"
+      #
+      # IMPORT CLOSURE (backlog.fix.publish-set-dangling-imports). tests/** ships,
+      # but this spec imports into packages/mcp-browser-devtools/src/tools/, which
+      # is NOT on the per-package include allowlist above — so the published copy
+      # would carry dangling imports and the mirror could not compile. ADDITIVE
+      # ONLY: an exclude can only SHRINK the publish set, so it cannot leak
+      # anything and cannot weaken the presentations tripwire. Enforced by
+      # tests/unit/publish-shipped-tree-import-closure.test.mjs.
+      - "tests/unit/browser-devtools-mcp.spec.mjs"
+
+remotes:
+  rks-public:
+    url: "git@github.com:ux287/routekit-shell.git"
+    profile: "rks-public"
+    branch: "main"
+    # ARMED. `enabled: true` permits the force-push to the public mirror at remote
+    # resolution inside publish.mjs, so ALL callers (rks_release, the rks_publish MCP
+    # tool, and `routekit publish`) inherit it. Set to literal `false` to disarm.
+    # Only literal booleans are accepted: any other value (or an unknown sibling key)
+    # BLOCKS the publish rather than being coerced.
+    enabled: true
