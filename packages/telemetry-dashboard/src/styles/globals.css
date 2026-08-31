@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Presentations kit — ux287.com-derived hero + two-tone headline utilities. */
+@layer components {
+  /* Dark, near-black hero surface with a subtle blue glow. */
+  .hero-gradient-dark {
+    background-color: #0a0a0a;
+    background-image:
+      radial-gradient(60% 80% at 80% -10%, rgba(59, 130, 246, 0.22), transparent 60%),
+      linear-gradient(160deg, #0b0b0d 0%, #050506 100%);
+  }
+
+  /* Deep-blue hero gradient variant. */
+  .hero-gradient-blue {
+    background-color: #0b1220;
+    background-image:
+      radial-gradient(70% 90% at 85% -10%, rgba(59, 130, 246, 0.45), transparent 60%),
+      linear-gradient(160deg, #0b1220 0%, #14235c 55%, #1e3a8a 100%);
+  }
+
+  /* Two-tone headline: emphasis span rendered in the bright-blue accent. */
+  .headline-two-tone .accent {
+    color: #3b82f6;
+  }
+
+  /* ── Sketch visual language ─────────────────────────────────────────────
+     Diagram primitives render as faint, hand-drawn, desaturated "technical
+     sketches" that recede behind the slide's crisp headline/idea. The wobble
+     comes from the #rks-sketch SVG displacement filter injected by Deck.tsx;
+     saturate() greys it out and opacity fades it toward the background. The
+     foreground message (headline, eyebrow, accent) stays crisp. */
+  .sketch-diagram {
+    filter: url(#rks-sketch) saturate(0.15);
+    opacity: 0.65;
+  }
+
+  /* Prominent hand-drawn hero illustration for the right column of a two-column
+     slide. Same wobble as .sketch-diagram but present, not faded — it carries
+     the visual weight while the headline stays crisp on the left. */
+  .sketch-illustration {
+    filter: url(#rks-sketch) saturate(0.55);
+    opacity: 0.95;
+  }
+
+  /* Faint blueprint grid behind light content slides — texture, not content. */
+  .sketch-grid {
+    background-image:
+      linear-gradient(to right, rgba(59, 130, 246, 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(59, 130, 246, 0.05) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+}

@@ -1,0 +1,35 @@
+# Backlog Integration Policy for RouteKit Shell
+# Controls how Claude Code plans are persisted to project knowledge
+
+# Enable/disable backlog integration
+enabled: true
+
+# PRIMARY MODE: Redirect plans directly to backlog
+# When true: Blocks EnterPlanMode, instructs Claude to write directly to notes/backlog.*
+# When false: Allows normal plan mode, copies to backlog on ExitPlanMode
+redirect_plans_to_backlog: true
+
+# Slug generation strategy (when redirect is enabled)
+# Options:
+#   prompt - Claude will ask user for slug
+#   auto - Generate from task description
+#   timestamp - Use timestamp-based slug
+slug_strategy: prompt
+
+# FALLBACK MODE: Copy plan on exit (when redirect is false)
+copy_on_exit: true
+plan_source_dir: "~/.claude/plans"
+
+# Backlog note settings
+backlog_prefix: "backlog"      # Note namespace: notes/backlog.{slug}.md
+initial_status: "planned"      # Status field value for new backlog items
+
+# Status workflow (for reference)
+# planned -> approved -> implemented
+# planned: Plan captured, not yet started
+# approved: Execution started (feature branch created)
+# implemented: Tests pass, merged to dev
+
+# Optional: Auto-create RKS execution plan from backlog
+# When true, runs: routekit plan {project} --problem backlog.{slug}
+auto_create_rks_plan: false
