@@ -1,0 +1,6 @@
+{
+  "id": "generic-toolbox",
+  "stack": "generic/toolbox",
+  "root": ".",
+  "kgFile": "routekit/kg.yaml"
+}
