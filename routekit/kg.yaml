@@ -1,0 +1,30 @@
+stack: repo.routekit-shell
+framework: monorepo
+runtime: node18
+code_roots:
+  - packages/cli/src
+  - packages/mcp-rks/src
+  - scripts
+  - notes
+  - tests
+  - .routekit
+  - routekit
+components:
+  cli:
+    path: packages/cli
+    description: RouteKit CLI implementation
+  mcp_server:
+    path: packages/mcp-rks
+    description: MCP server exposing rks.* tools
+  docs:
+    path: notes
+    description: Dendron vault for backlog + docs
+content:
+  dendron_vault:
+    type: dendron
+    path: notes
+    schema: notes/root.schema.yml
+scripts:
+  analyze: "node scripts/test-analyze.mjs routekit-shell"
+  rag_init: "routekit rag init routekit-shell"
+  rag_embed: "routekit rag embed routekit-shell"
