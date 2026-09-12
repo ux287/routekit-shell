@@ -1,0 +1,80 @@
+# Code Review Policy
+# Controls the behavior of rks_review agent-based code review
+
+enabled: true
+
+# Review model - uses a smaller/faster model for cost efficiency
+# Sonnet is sufficient for pattern matching and issue detection
+model: claude-sonnet-4-6
+
+# Off-rail auto-ship enforcement posture (rks_guardrails_on)
+# - advisory (default): review + scope reconciliation always RUN and are always
+#   recorded in shipSteps and telemetry, but never halt the ship
+# - block: an enforcement finding halts the ship before integration; the work is
+#   left as a commit on the off-rail branch and the working branch is untouched
+#
+# The asymmetry with the on-rail gate is INTENTIONAL. rks_story_ship fails closed
+# (an unavailable reviewer halts). Off-rail is the documented escape hatch for
+# sessions where the on-rail path has wedged, so copying fail-closed here would
+# leave a user with no reviewer credential unable to ship by either route. The
+# defect this gate fixes is silence, not permissiveness.
+offRail: advisory
+
+# Verdict behavior
+# - block: Review must pass before merge proceeds
+# - warn: Log findings but allow merge
+# - skip: Disable review entirely
+verdictMode: warn
+
+# Categories that trigger BLOCK verdict
+blockCategories:
+  - enforcement_modification  # Changes to .routekit/hooks/ files
+  - security_issue           # Secrets, eval, injection patterns
+
+# Categories that trigger WARN verdict
+warnCategories:
+  - missing_error_handling   # No error/catch handling in new code
+  - test_coverage           # Code changes without test changes
+  - anti_patterns           # console.log, TODO, hardcoded values
+  - ac_coverage             # Diff may not fully implement AC
+
+# Files that always trigger enforcement_modification category
+enforcementPaths:
+  - .routekit/hooks/
+  - .rks/protected-files.yml
+  - .rks/review-policy.yaml
+  - .rks/scope-policy.yaml
+
+# HARD-BLOCK security patterns. Deliberately small and enumerated: every entry
+# here produces a block-severity security_issue finding, which verdictMode:warn
+# cannot soften. Only shapes that are dangerous on their face belong here.
+#
+# The credential patterns require a NON-EMPTY quoted literal on the right-hand
+# side. That is what distinguishes a hardcoded secret from the benign forms that
+# made this gate unusable: `password = ""`, an ordinary parameter default, and
+# `const key = process.env.API_KEY` (no quoted literal) all correctly miss.
+securityPatterns:
+  - "eval\\("
+  - "new Function\\("
+  - "password\\s*[:=]\\s*['\"][^'\"]+['\"]"
+  - "api[_-]?key\\s*[:=]\\s*['\"][^'\"]+['\"]"
+  - "secret\\s*[:=]\\s*['\"][^'\"]+['\"]"
+
+# HEURISTIC security patterns. Same security_issue category — so telemetry and
+# reviewers still see them — but WARN severity, so they never hard-block.
+#
+# `process\.env\.` lived in securityPatterns with the comment "Warn about env
+# access in new code": the author wanted a warning and had no way to express one,
+# so every routine env read produced a blocking verdict. One ship this session
+# drew four blockers, all of them a test-mode guard reading process.env.VITEST.
+# A gate that blocks on routine code stops being believed on the day it is right.
+securityHeuristics:
+  - "process\\.env\\."
+
+# Patterns that trigger anti_patterns category
+antiPatterns:
+  - "console\\.log\\("
+  - "// TODO"
+  - "// FIXME"
+  - "// HACK"
+  - "debugger;"

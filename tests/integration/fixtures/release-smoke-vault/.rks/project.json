@@ -1,0 +1,16 @@
+{
+  "id": "release-smoke-vault",
+  "root": ".",
+  "schemaVersion": 1,
+  "frameworkProject": false,
+  "createdAt": 1780972648343,
+  "updatedAt": 1780972648343,
+  "notes": {
+    "vaultPath": "notes",
+    "dendronConfig": "dendron.yml"
+  },
+  "rag": {
+    "indexPath": ".rks/rag/index.lance",
+    "enabled": true
+  }
+}
