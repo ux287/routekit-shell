@@ -1,0 +1,58 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Cache
+.turbo/
+.vite/
+.cache/
+
+# Test coverage
+coverage/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# RKS runtime artifacts (keep .rks/project.json and .rks/prompts/)
+.rks/rag/
+.rks/runs/
+.rks/session/
+.rks/state/
+.rks/telemetry/
+.rks/*.lock
+.rks/governor-session.json
+.rks/active-scope.json
+.rks/guardrails-off-sessions.jsonl
+.rks/guardrails-scope.json
+.rks/pending-plan.json
+.rks/fetch-cache/
+
+# RouteKit runtime state (keep .routekit/hooks/)
+.routekit/state.json
+.routekit/telemetry/
+.routekit/context-state.json
+
+# Dendron runtime
+.dendron.port
+.dendron.ws
+notes/.dendron.cache.json
