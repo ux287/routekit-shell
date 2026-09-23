@@ -1,0 +1,64 @@
+# Dependency-license CI gate policy.
+#
+# ┌─ CRITICAL RATIONALE — do NOT relax this as "redundant with AGPL". ─────────────────┐
+# │ The core is AGPL-3.0, so it COULD legally consume GPL/AGPL dependencies. This gate │
+# │ is deliberately STRICTER: it keeps the codebase RE-LICENSABLE for the commercial / │
+# │ RKS-Pro surface. A strong-copyleft dep in core would block dual-licensing; in a    │
+# │ Pro plugin it would block selling it closed (you cannot relicense code you don't   │
+# │ own). This is a BUSINESS / monetization policy, not a license-compatibility check. │
+# └────────────────────────────────────────────────────────────────────────────────────┘
+#
+# Verdicts:
+#   allow  → pass
+#   deny   → FAIL the gate (exit non-zero)
+#   flag   → warn-only (listed, does NOT fail the gate) — weak copyleft, review case-by-case
+#   unknown→ any license not in the lists below → warn-only, unless unknownIsDeny: true
+#
+# SPDX expressions are evaluated: OR = least-restrictive operand wins (a consumer may
+# elect the permissive branch); AND = most-restrictive operand wins (all are required).
+# Legacy dual-license arrays (["MIT","Apache-2.0"]) are treated as OR.
+
+allow:
+  - MIT
+  - MIT-0
+  - ISC
+  - BSD-2-Clause
+  - BSD-3-Clause
+  - Apache-2.0
+  - 0BSD
+  - CC0-1.0
+  - Unlicense
+  - BlueOak-1.0.0
+  - Python-2.0
+  - WTFPL
+  - CC-BY-4.0
+
+deny:
+  - GPL-1.0-only
+  - GPL-1.0-or-later
+  - GPL-2.0-only
+  - GPL-2.0-or-later
+  - GPL-3.0-only
+  - GPL-3.0-or-later
+  - AGPL-1.0-only
+  - AGPL-1.0-or-later
+  - AGPL-3.0-only
+  - AGPL-3.0-or-later
+
+flag:
+  - LGPL-2.0-only
+  - LGPL-2.0-or-later
+  - LGPL-2.1-only
+  - LGPL-2.1-or-later
+  - LGPL-3.0-only
+  - LGPL-3.0-or-later
+  - MPL-1.1
+  - MPL-2.0
+  - EPL-1.0
+  - EPL-2.0
+  - CDDL-1.0
+  - CDDL-1.1
+
+# Harden the gate by treating unrecognized/missing licenses as denials (default: false —
+# warn-only, so a mislabeled dep doesn't red the build until a human reviews it).
+unknownIsDeny: false
