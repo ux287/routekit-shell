@@ -1,0 +1,62 @@
+{
+  "timestamp": "2026-02-24T20:07:11.915Z",
+  "toolFailureRate": {
+    "byToolName": {
+      "rks_guardrails_status": 0,
+      "rks_guardrails_on": 0,
+      "rks_code_context": 0,
+      "rks_rag_query": 0.014354066985645933,
+      "rks_guardrails_off": 0.018867924528301886,
+      "rks_rag_compact": 0,
+      "dendron_edit_note": 0.05263157894736842,
+      "dendron_update_field": 0.047244094488188976,
+      "dendron_read_note": 0,
+      "rks_plan": 0,
+      "rks_rag_embed": 0.22727272727272727,
+      "dendron_create_note": 0.024390243902439025,
+      "rks_project_get": 0,
+      "rks_git_state": 0,
+      "rks_git_commit": 0,
+      "rks_refine": 0,
+      "rks_refine_apply": 0.3,
+      "rks_preflight": 0,
+      "rks_exec": 0.7058823529411765,
+      "rks_tag": 0,
+      "rks_release": 0,
+      "dendron_mark_implemented": 0,
+      "rks_plan_ready": 0.14285714285714285,
+      "rks_sync_staging": 0,
+      "rks_stash": 0,
+      "rks_reset": 0,
+      "rks_staging_pr": 0,
+      "rks_telemetry_query": 0.14285714285714285,
+      "rks_ship": 0,
+      "rks_story_ship": 0,
+      "rks_restore": 0,
+      "rks_telemetry_report": 0,
+      "rks_plan_review": 1
+    },
+    "overall": 0.07918968692449356
+  },
+  "planPassRate": {
+    "passCount": 0,
+    "totalCount": 0,
+    "rate": 0
+  },
+  "execSuccessRate": {
+    "successCount": 0,
+    "totalCount": 0,
+    "rate": 0
+  },
+  "execLatency": {
+    "avgMs": 0,
+    "minMs": 0,
+    "maxMs": 0,
+    "count": 0
+  },
+  "guardrailViolations": {
+    "offCount": 288,
+    "onCount": 275,
+    "rate": 0.5115452930728241
+  }
+}

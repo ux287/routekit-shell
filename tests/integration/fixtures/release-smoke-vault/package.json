@@ -1,0 +1,6 @@
+{
+  "name": "release-smoke-vault",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Synthetic project used by .github/workflows/release-smoke.yml to verify a release artifact actually produces a populated LanceDB with every expected content_type. This is a fixture; not a real package."
+}
