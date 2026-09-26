@@ -1,0 +1,31 @@
+{
+  "_comment": "B5 pre-refactor effective config for vitest.config.unit.mjs. Tier-2 update (backlog.feat.test-suite-tier-2-unit-tier-bloat-audit): the per-tier exclude of tests/unit/git-release.test.mjs was removed when the file moved to tests/integration/, and a globalTeardown was added to sweep tests/.tmp/ after every fork exits. The post-refactor merged config MUST match this fixture exactly.",
+  "include": [
+    "tests/unit/**/*.test.*",
+    "tests/unit/**/*.spec.*",
+    "tests/*.test.*",
+    "tests/*.spec.*"
+  ],
+  "exclude": [
+    "tests/.tmp/**"
+  ],
+  "bail": 1,
+  "isolate": true,
+  "pool": "forks",
+  "poolOptions": {
+    "forks": {
+      "minForks": 1,
+      "maxForks": 2
+    }
+  },
+  "setupFiles": [
+    "tests/setup.mjs"
+  ],
+  "clearMocks": true,
+  "env": {
+    "NODE_NO_WARNINGS": "1",
+    "ROUTEKIT_SKIP_GLOBAL_CONFIG": "true"
+  },
+  "hookTimeout": 30000,
+  "testTimeout": 60000
+}
