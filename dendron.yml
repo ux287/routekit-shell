@@ -1,0 +1,20 @@
+version: 5
+workspace:
+  vaults:
+    - fsPath: notes
+      name: routekit-shell-core
+      visibility: public
+  schemas:
+    - notes/schema.yml
+    - notes/schema.design.yml
+    - notes/schema.docs.yml
+    - notes/schema.how-to.yml
+    - notes/schema.backlog.yml
+dev:
+  enablePreviewV2: true
+commands:
+  lookup:
+    note:
+      confirmVaultOnCreate: false
+      selectionType: extract
+      vaultSelectionModeOnCreate: smart
