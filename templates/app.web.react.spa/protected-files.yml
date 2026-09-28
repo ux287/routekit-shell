@@ -1,0 +1,5 @@
+# Files a scaffolded child must not let rks overwrite. `projectProtected` guards the vendored
+# rks-shell tooling in the child; project-specific protections are merged in per project.
+protected: []
+projectProtected:
+  - "tools/routekit-shell/**"
