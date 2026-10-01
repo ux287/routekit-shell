@@ -1,0 +1,9 @@
+stack: generic/toolbox
+framework: none
+code_roots:
+  - src
+  - scripts
+components: {}
+content: {}
+design_tokens: {}
+scripts: {}
