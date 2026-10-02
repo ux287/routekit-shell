@@ -1,0 +1,10 @@
+stack: generic/toolbox
+framework: none
+runtime: node18
+code_roots:
+  - src
+  - scripts
+components: {}
+content: {}
+design_tokens: {}
+scripts: {}

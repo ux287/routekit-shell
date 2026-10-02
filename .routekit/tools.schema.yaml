@@ -1,0 +1,7 @@
+FS_SEARCH:
+  input:  { query: string, globs?: string[], context_lines?: number, max_bytes_per_file?: number }
+  output: [{ path, line_start, line_end, heading?, text, score, ts? }]
+
+RAG_SEARCH:
+  input:  { query: string, filters?: { namespace?: string[], tags?: string[], after?: string, before?: string }, k?: number }
+  output: [{ doc_id, path, title?, text, sim, ts? }]
