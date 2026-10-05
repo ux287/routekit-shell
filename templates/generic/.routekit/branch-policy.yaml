@@ -1,0 +1,33 @@
+# Branch workflow policy
+# Enforces feature branch workflow: branch from dev, merge back to dev
+
+# The base branch that feature branches should be created from
+base_branch: dev
+
+# Branches that are protected (no direct commits allowed)
+protected_branches:
+  - main
+  - dev
+
+# Pattern for valid feature branch names
+# Must match: feature/*, fix/*, refactor/*, docs/*, chore/*
+feature_branch_pattern: "^(feature|fix|refactor|docs|chore)/.+"
+
+# Require tests to pass before merging to dev. No merge_test_command is seeded: the merge
+# gate resolves .rks/project.json testCommand, then package.json scripts.test, and
+# otherwise skips with a notice.
+require_tests_before_merge: true
+
+# Block direct commits to these branches. This is by design: a direct Bash commit on any
+# branch listed here is refused. Commit through a feature branch matching
+# feature_branch_pattern, or through the rks MCP tools - rks_ship creates a branch,
+# commits and opens the PR, so it works from a blocked branch.
+block_direct_commits_to:
+  - main
+  - dev
+
+# Merges to main are blocked (use PRs via GitHub)
+block_merge_to_main: true
+
+# Allow these branches to bypass checks (for bootstrapping)
+exempt_branches: []
