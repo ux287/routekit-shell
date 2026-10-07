@@ -1,0 +1,27 @@
+# Git Workflow Policy Configuration
+# Controls what git operations Claude can perform
+
+# Branches that require extra protection
+protected_branches:
+  - main
+  - dev
+
+# Require PRs for pushing to protected branches
+require_pr_for_protected: true
+
+# Explicitly blocked operations
+blocked_operations:
+  - pattern: "git reset --hard"
+    branches: [main, dev]
+    message: "Hard reset on protected branch blocked"
+
+  - pattern: "git push.*--delete"
+    branches: [main, dev]
+    message: "Branch deletion on protected branch blocked"
+
+# Test requirements
+# No test_command is seeded: the commit gate resolves .rks/project.json commitTestCommand,
+# then testCommand, then package.json scripts.test, and otherwise skips with a notice.
+require_tests:
+  before_commit: true
+  before_push: false

@@ -1,0 +1,72 @@
+provenance_enforcement:
+  # Master switch
+  enabled: true
+
+  # block = enforce, warn = log but allow
+  mode: block
+
+  # How long RAG-sourced paths stay blessed
+  rag_path_ttl_turns: 3
+
+  # How long user-specified paths stay valid
+  user_path_ttl_turns: 5
+
+  # Exploration pattern detection
+  exploration_detection:
+    # Max sequential reads without RAG/user context
+    max_uncontextualized_reads: 2
+    # Time window for pattern detection
+    window_seconds: 60
+    # Score threshold for blocking
+    threshold: 3
+
+  # Always-allowed paths (runtime configs and infrastructure)
+  runtime_paths:
+    - ".routekit/*.yaml"
+    - ".routekit/hooks/*"
+    - ".rks/prompts/*"
+    - "package.json"
+    - "tsconfig.json"
+    - ".mcp.json"
+    - "CLAUDE.md"
+    - "README.md"
+    - "AGENTS.md"
+    - ".rks/*.yaml"
+    - ".rks/runs/*"
+    - ".rks/session/*"
+    - ".claude/*"
+    # -------------------------------------------------------------------
+    # Hook telemetry sinks — admitted INDIVIDUALLY, by exact sink name.
+    # Do NOT widen these to a directory glob such as ".rks/telemetry/*"
+    # or ".routekit/telemetry/*".
+    #
+    # Rationale (security): telemetry event VALUES may carry credential
+    # material. Hooks that write here are expected to exercise restraint
+    # about that — packages/hooks/system/track-agent-provenance.mjs emits
+    # top-level key NAMES only, never values, for exactly this reason.
+    # A directory glob would auto-admit every FUTURE sink, including one
+    # written by code that never made that decision. Naming each sink
+    # forces the judgement to be made once, here, per sink.
+    #
+    # Every line of this rationale must begin with "#". The gate-A reader
+    # (loadRuntimePaths in packages/hooks/read/redirect-read-to-agent.mjs)
+    # is a line scanner, not a YAML parser: a bare continuation line is
+    # non-blank, non-comment and non-dash, so it would terminate the scan
+    # and silently drop every entry below this point, while the gate-B
+    # js-yaml reader still saw them. Do not let this text wrap unprefixed.
+    # -------------------------------------------------------------------
+    - ".routekit/telemetry/provenance-blocks.log"
+    - ".rks/telemetry/events-*.jsonl"
+    - "notes/backlog.*"
+    - "notes/research.*"
+    - "notes/how-to.*"
+
+  # Always require RAG (no exceptions)
+  strict_rag_paths:
+    - "/notes/"
+    - "/docs/"
+
+  # Telemetry
+  telemetry:
+    enabled: true
+    log_file: ".routekit/telemetry/read-provenance.log"
