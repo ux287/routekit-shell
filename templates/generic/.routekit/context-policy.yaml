@@ -1,0 +1,65 @@
+# Context Window Management Policy for RouteKit Shell
+# Monitors context accumulation and warns before exhaustion
+
+# Threshold percentages for warnings (based on estimated token counts)
+warning_threshold_percent: 80
+critical_threshold_percent: 95
+
+# Suggest task splitting/summarization at this threshold
+suggest_summarize_at: 70
+
+# Tools to track for context accumulation
+# These tools typically add significant content to the context
+track_tools:
+  - Read
+  - Grep
+  - Glob
+  - Bash
+  - WebFetch
+  - WebSearch
+
+# Estimated context limit (tokens) - Claude's context window
+# This is a conservative estimate; actual may vary by model
+estimated_context_limit: 200000
+
+# Token estimation multipliers per tool
+# Rough heuristics: 1 token ~= 4 characters for English text
+token_estimation:
+  Read:
+    per_line: 10          # ~40 chars per line average
+    max_estimate: 50000   # Cap estimate for large files
+  Grep:
+    per_match: 50         # ~200 chars per match with context
+    max_estimate: 10000
+  Glob:
+    per_file: 15          # Path length average
+    max_estimate: 5000
+  Bash:
+    per_line: 8           # Command output lines
+    max_estimate: 20000
+  WebFetch:
+    per_response: 5000    # Summarized content
+    max_estimate: 10000
+  WebSearch:
+    per_result: 200       # Search result snippet
+    max_estimate: 3000
+
+# Actions to suggest when thresholds are reached
+suggestions:
+  at_70_percent:
+    - "Consider summarizing completed work before continuing"
+    - "Break remaining tasks into smaller focused steps"
+  at_80_percent:
+    - "Context is filling up - prioritize essential reads only"
+    - "Use targeted RAG queries instead of broad file searches"
+  at_95_percent:
+    - "Critical: Complete current task and commit progress"
+    - "Consider starting a new session for remaining work"
+
+# Path to store context tracking state
+state_file: .routekit/context-state.json
+
+# Reset context tracking on these events
+reset_on:
+  - git_commit      # After committing, context can be summarized
+  - new_session     # Each session starts fresh
