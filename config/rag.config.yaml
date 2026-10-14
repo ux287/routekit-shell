@@ -1,0 +1,18 @@
+provider: "qdrant"         # or "pgvector","pinecone","chroma"
+collection: "routekit"
+namespaces:
+  - name: "dendron"
+  - name: "repo"
+  - name: "tickets"
+chunking:
+  size: 1200
+  overlap: 150
+metadata:
+  include: ["path", "title", "ts", "tags", "namespace"]
+exclude:
+  - ".routekit/**"
+  - "config/*.yaml"
+  - "notes/scratch.*"
+  - "notes/archive.*" 
+  - "notes/root.*"
+  - "notes/.dendron.cache.json"

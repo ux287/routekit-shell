@@ -1,0 +1,40 @@
+{
+  "projectId": "routekit-shell",
+  "task": "Synthetic golden scenario: Add enhanced debug logging to validation infrastructure",
+  "planSummary": "Add enhanced debug logging to search-replace validation and guardrails modules",
+  "status": "executable",
+  "steps": [
+    {
+      "title": "Add debug logging to validationDebug",
+      "description": "Enhance the validationDebug function with timestamp prefix",
+      "order": 1,
+      "id": "step-001",
+      "action": "search_replace",
+      "path": "packages/mcp-rks/src/validation/search-replace.mjs",
+      "content": null,
+      "edits": [
+        {
+          "search": "function validationDebug(...args) {\n  if (!VALIDATION_DEBUG) return;\n  console.error(\"[validation-debug]\", ...args);\n}",
+          "replace": "function validationDebug(...args) {\n  if (!VALIDATION_DEBUG) return;\n  console.error(`[validation-debug][${new Date().toISOString()}]`, ...args);\n}"
+        }
+      ],
+      "command": null
+    },
+    {
+      "title": "Add debug logging to runGuardrails",
+      "description": "Add entry log to runGuardrails function",
+      "order": 2,
+      "id": "step-002",
+      "action": "search_replace",
+      "path": "packages/mcp-rks/src/test/guardrails.mjs",
+      "content": null,
+      "edits": [
+        {
+          "search": "export function runGuardrails(plan, options = {}) {\n  const failures = [];\n  const warnings = [];",
+          "replace": "export function runGuardrails(plan, options = {}) {\n  // Guardrail evaluation entry point\n  const failures = [];\n  const warnings = [];"
+        }
+      ],
+      "command": null
+    }
+  ]
+}
