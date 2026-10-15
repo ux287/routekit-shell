@@ -1,0 +1,45 @@
+# Documentation Sync Policy for RouteKit Shell
+# Reminds to update docs when code changes
+
+# Enable/disable docs sync checking
+enabled: true
+
+# File patterns that trigger docs sync check
+check_file_patterns:
+  - "\\.ts$"
+  - "\\.tsx$"
+  - "\\.js$"
+  - "\\.mjs$"
+
+# Patterns to skip
+skip_patterns:
+  - "node_modules/"
+  - "dist/"
+  - "build/"
+  - "\\.test\\."
+  - "\\.spec\\."
+  - "\\.d\\.ts$"
+  - ".routekit/"
+  - ".claude/"
+  - "templates/"
+
+# Documentation locations to search
+doc_locations:
+  - "notes/"
+  - "docs/"
+  - "README.md"
+
+# Use RAG to find related documentation
+rag_query_for_docs: true
+
+# Minimum lines changed to trigger suggestion
+# Helps avoid noise for small edits
+min_changes_to_suggest: 15
+
+# Types of changes that most likely need doc updates
+high_priority_changes:
+  - "public API changes"
+  - "new exports"
+  - "renamed functions"
+  - "changed function signatures"
+  - "new features"
