@@ -1,0 +1,22 @@
+name: Check hooks drift
+
+on:
+  push:
+    paths:
+      - 'packages/hooks/**'
+      - '.routekit/hooks/**'
+  pull_request:
+    paths:
+      - 'packages/hooks/**'
+      - '.routekit/hooks/**'
+
+jobs:
+  check-hooks-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check no drift between packages/hooks and templates/generic/.routekit/hooks
+        run: node scripts/sync-hooks.mjs --check

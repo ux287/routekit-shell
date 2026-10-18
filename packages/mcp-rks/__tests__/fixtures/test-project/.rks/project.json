@@ -1,0 +1,6 @@
+{
+  "id": "test-project",
+  "name": "test-project",
+  "baseBranch": "staging",
+  "kgFile": "routekit/kg.yaml"
+}
