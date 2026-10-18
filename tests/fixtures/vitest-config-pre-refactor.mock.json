@@ -1,0 +1,30 @@
+{
+  "_comment": "B5 pre-refactor effective config for vitest.config.mock.mjs. The post-refactor merged config MUST match this fixture exactly. Includes B3's *.workflow.test.* exclude.",
+  "include": [
+    "tests/integration/**/*.test.*",
+    "tests/integration/**/*.spec.*"
+  ],
+  "exclude": [
+    "tests/.tmp/**",
+    "tests/integration/**/*.workflow.test.*"
+  ],
+  "bail": 1,
+  "isolate": true,
+  "pool": "forks",
+  "poolOptions": {
+    "forks": {
+      "minForks": 1,
+      "maxForks": 4
+    }
+  },
+  "setupFiles": [
+    "tests/setup.mjs"
+  ],
+  "clearMocks": true,
+  "env": {
+    "NODE_NO_WARNINGS": "1",
+    "ROUTEKIT_SKIP_GLOBAL_CONFIG": "true"
+  },
+  "hookTimeout": null,
+  "testTimeout": null
+}
