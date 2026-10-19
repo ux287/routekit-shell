@@ -1,0 +1,35 @@
+{
+  "default": {
+    "id": "default",
+    "description": "Fallback scenario allowing standard APE flow.",
+    "allowedTools": ["rks.analyze", "rks.plan", "rks.exec", "rks.ape"],
+    "requiresAnalyze": false,
+    "requiresReview": false
+  },
+  "scenarios": [
+    {
+      "id": "blog-content",
+      "description": "Blog/changelog tasks only require plan + exec.",
+      "match": { "labels": ["blog", "changelog"] },
+      "allowedTools": ["rks.plan", "rks.exec"],
+      "requiresAnalyze": false,
+      "requiresReview": false
+    },
+    {
+      "id": "infra-telemetry",
+      "description": "Infrastructure or telemetry changes must include analyze.",
+      "match": { "labels": ["telemetry", "rag", "infra"] },
+      "allowedTools": ["rks.analyze", "rks.plan", "rks.exec"],
+      "requiresAnalyze": true,
+      "requiresReview": false
+    },
+    {
+      "id": "guardrail-critical",
+      "description": "Guardrail policy updates require manual review before exec.",
+      "match": { "labels": ["guardrail"] },
+      "allowedTools": ["rks.analyze", "rks.plan"],
+      "requiresAnalyze": true,
+      "requiresReview": true
+    }
+  ]
+}
