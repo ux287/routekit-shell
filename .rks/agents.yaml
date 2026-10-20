@@ -1,0 +1,50 @@
+# Agent Configuration
+# Precedence: env var > agents.yaml > hardcoded defaults in config.mjs
+# Prompts: loaded from .rks/prompts/agent-{name}.md (not configured here)
+agents:
+  product-owner:
+    maxTurns: 5
+    timeoutMs: 60000
+  research:
+    backend: claude-cli
+    model: claude-haiku-5-5
+    fallbackModel: claude-sonnet-5-5
+    maxTurns: 12
+    timeoutMs: 60000
+  git:
+    model: claude-haiku-5-5
+    maxTurns: 7
+    timeoutMs: 45000
+  dendron:
+    model: claude-haiku-5-5
+    maxTurns: 5
+    timeoutMs: 30000
+  telemetry:
+    model: claude-haiku-5-5
+    maxTurns: 5
+    timeoutMs: 30000
+  ship:
+    maxTurns: 8
+    timeoutMs: 120000
+  cycle-complete:
+    model: claude-haiku-5-5
+    maxTurns: 7
+    timeoutMs: 90000
+  story:
+    maxTurns: 7
+    timeoutMs: 90000
+  delivery:
+    maxTurns: 15
+    timeoutMs: 300000
+  recovery:
+    maxTurns: 10
+    timeoutMs: 120000
+  llm-planner:
+    backend: claude-cli
+  reviewer:
+    backend: claude-cli
+  external-research:
+    backend: claude-cli
+  qa-agent:
+    backend: claude-cli
+
