@@ -1,0 +1,2792 @@
+{
+  "description": "Committed ListTools golden for packages/mcp-rks/src/server.mjs. Regenerate only with UPDATE_MCP_SURFACE_GOLDEN=1 and review the diff; a non-empty diff in a move-only story is a defect.",
+  "source": "createServer() + InMemoryTransport listTools(), tools sorted by name, fields name/description/inputSchema",
+  "tools": [
+    {
+      "description": "Create a Dendron note with RouteKit-style frontmatter. Callable directly with a governor token. Without a token, auto-routes through rks_agent_dendron.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "desc": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "testFile": {
+            "description": "Path to the test file that validates this story",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename"
+        ],
+        "type": "object"
+      },
+      "name": "dendron_create_note"
+    },
+    {
+      "description": "Edit an existing Dendron note using surgical SEARCH/REPLACE patches. Patches are applied sequentially; if any search string is not found, no changes are written (full rollback). Preserves frontmatter. Callable directly with a governor token.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "patches": {
+            "items": {
+              "properties": {
+                "replace": {
+                  "type": "string"
+                },
+                "search": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "search",
+                "replace"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "filename",
+          "patches"
+        ],
+        "type": "object"
+      },
+      "name": "dendron_edit_note"
+    },
+    {
+      "description": "Ensure a Dendron note has required frontmatter fields. Callable directly with a governor token.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename"
+        ],
+        "type": "object"
+      },
+      "name": "dendron_fix_frontmatter"
+    },
+    {
+      "description": "Mark a backlog story as implemented and move to z_implemented. Callable directly with a governor token.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "commitId": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename"
+        ],
+        "type": "object"
+      },
+      "name": "dendron_mark_implemented"
+    },
+    {
+      "description": "Read a Dendron note's content (frontmatter + body). Callable directly with a governor token. Large notes: pass sections, fields, offset/limit or maxBytes for a bounded read; an unselected read over the byte cap returns a navigable manifest (frontmatter keys and headings) with truncated: true instead of overflowing. TWO DIFFERENT COMPLETENESS FIELDS: truncated means only that the response is not the whole note, so it is true for every selection by construction and answers nothing about your selection; selectionComplete is the field that answers whether what you asked for came back whole. Read selectionComplete — never truncated — before rewriting a field from a slice, because a whole-array write built from a partial read silently destroys the entries you did not see. fieldsNotFound lists any requested field names the note does not carry.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "fields": {
+            "description": "Top-level frontmatter keys to return, with their indented blocks",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "limit": {
+            "description": "Line count, when slicing by line",
+            "type": "number"
+          },
+          "maxBytes": {
+            "description": "Byte cap on returned content; requests a bounded read even when the note fits",
+            "type": "number"
+          },
+          "offset": {
+            "description": "0-based first line, when slicing by line",
+            "type": "number"
+          },
+          "sections": {
+            "description": "Body headings to return, each running to the next heading",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "filename"
+        ],
+        "type": "object"
+      },
+      "name": "dendron_read_note"
+    },
+    {
+      "description": "Update a single field in a Dendron note. Pass arrays as JSON arrays, not strings. Callable directly with a governor token.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "acknowledgeRemoval": {
+            "description": "Permit a write that REMOVES entries from an array field (targetFiles, dependsOn, testFiles, testRequirements). Such a write is refused by default, because the usual cause is a caller rewriting the whole array from a partial read. Pass true only when the removal is intended; the response reports beforeCount, afterCount and removed either way.",
+            "type": "boolean"
+          },
+          "field": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array"
+              }
+            ]
+          }
+        },
+        "required": [
+          "filename",
+          "field",
+          "value"
+        ],
+        "type": "object"
+      },
+      "name": "dendron_update_field"
+    },
+    {
+      "description": "Validate frontmatter for notes under notes/. Callable directly with a governor token.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "dendron_validate_schema"
+    },
+    {
+      "description": "Run the Cycle Complete agent for post-ship lifecycle: mark story implemented, update epic, run governance checks, verify git state, embed RAG. Ensures nothing is forgotten after shipping.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "prNumber": {
+            "description": "PR number for reference",
+            "type": "number"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "storyId": {
+            "description": "Backlog story ID that was shipped",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "storyId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_agent_cycle_complete"
+    },
+    {
+      "description": "Run the Delivery agent for walk-away autonomy: batch stories into a release by composing Story, Ship, and Cycle Complete agents. Validates, ships, and completes the full release pipeline.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "autoDiscover": {
+            "description": "Explicitly authorize acting on auto-discovered ready stories when storyIds is omitted. Defaults to false.",
+            "type": "boolean"
+          },
+          "dryRun": {
+            "description": "If true, validate only — do not ship",
+            "type": "boolean"
+          },
+          "projectId": {
+            "description": "Project identifier",
+            "type": "string"
+          },
+          "storyIds": {
+            "description": "Specific story IDs to deliver. If omitted, autoDiscover must be set explicitly.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "description": "Release title (derived from stories if omitted)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_agent_delivery"
+    },
+    {
+      "description": "Run the Dendron agent to manage project notes — create, read, edit, validate frontmatter, update fields, and manage backlog lifecycle. Returns summaries, not raw file contents.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "content": {
+            "description": "Optional: body content for dendron_create_note auto-route — written byte-equal",
+            "type": "string"
+          },
+          "desc": {
+            "description": "Optional: desc for dendron_create_note auto-route",
+            "type": "string"
+          },
+          "filename": {
+            "description": "Optional: filename for dendron_create_note auto-route (bypasses LLM)",
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "request": {
+            "description": "Natural language dendron request (e.g., \"create a backlog note for X\", \"read the note backlog.foo\", \"update status to implemented\")",
+            "type": "string"
+          },
+          "testFile": {
+            "description": "Optional: testFile field for dendron_create_note auto-route",
+            "type": "string"
+          },
+          "title": {
+            "description": "Optional: title for dendron_create_note auto-route",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "request"
+        ],
+        "type": "object"
+      },
+      "name": "rks_agent_dendron"
+    },
+    {
+      "description": "Run external web research with structured output. Searches the web via provider APIs, synthesizes results using LLM, and returns a contract-validated answer with sources.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "maxSources": {
+            "description": "Maximum sources to retrieve (default: 10, max: 20)",
+            "type": "number"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Search provider (default: brave)",
+            "enum": [
+              "brave"
+            ],
+            "type": "string"
+          },
+          "query": {
+            "description": "Research query (min 5 characters)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "rks_agent_external_research"
+    },
+    {
+      "description": "Run the Git agent to execute atomic git operations (status, branch, checkout, commit, stash, reset, diff, log). Returns structured summaries, not raw output.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "request": {
+            "description": "Natural language git request (e.g., \"show me the current status\", \"create a branch for feature-x\", \"stash my changes\")",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "request"
+        ],
+        "type": "object"
+      },
+      "name": "rks_agent_git"
+    },
+    {
+      "description": "Run the Planner agent to design implementation plans for backlog stories. Cross-delegates to Research Agent for architecture context and PO Agent for story validation.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "constraints": {
+            "description": "Additional constraints or preferences for the plan",
+            "type": "string"
+          },
+          "problemId": {
+            "description": "Alias for storyId (used by MCP tool routing)",
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "storyId": {
+            "description": "Backlog story ID to plan",
+            "type": "string"
+          },
+          "task": {
+            "description": "Ad-hoc task description (alternative to storyId)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_agent_plan"
+    },
+    {
+      "description": "Run the Recovery agent to diagnose and repair broken state: git issues, stale locks, hook problems, RAG corruption. Composes Git Agent for complex repairs.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "autoFix": {
+            "description": "If true, automatically apply safe fixes after diagnosis",
+            "type": "boolean"
+          },
+          "projectId": {
+            "description": "Project identifier",
+            "type": "string"
+          },
+          "symptoms": {
+            "description": "Description of what went wrong (helps focus diagnosis)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_agent_recovery"
+    },
+    {
+      "description": "Run the Research agent to answer questions about the codebase, architecture, and documentation. Returns synthesized answers with sources and confidence scores.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "query": {
+            "description": "The research question or discovery query",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Scope to search within (default: all)",
+            "enum": [
+              "code",
+              "notes",
+              "all"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "rks_agent_research"
+    },
+    {
+      "description": "Run a specialized agent in isolated server-side context. Available agents: product-owner, research, git, dendron, telemetry, ship, cycle-complete, story, delivery, recovery, planner.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "agent": {
+            "description": "Agent name. One of: product-owner, research, git, dendron, telemetry, ship, cycle-complete, story, delivery, recovery, planner",
+            "type": "string"
+          },
+          "input": {
+            "description": "Agent-specific input payload (varies by agent)",
+            "type": "object"
+          }
+        },
+        "required": [
+          "agent",
+          "input"
+        ],
+        "type": "object"
+      },
+      "name": "rks_agent_run"
+    },
+    {
+      "description": "Run the Ship agent to handle the full code shipping workflow: branch, commit, push, PR creation, merge, and staging sync. Returns structured results with per-step status.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "storyId": {
+            "description": "Backlog story ID for traceability",
+            "type": "string"
+          },
+          "title": {
+            "description": "PR title override (derived from story if omitted)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_agent_ship"
+    },
+    {
+      "description": "Run the Story agent to manage story lifecycle: read stories, validate readiness, check dependencies, advance phases, and list backlog items. Returns structured lifecycle status.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "action": {
+            "default": "lifecycle",
+            "description": "Action to perform: lifecycle (full), validate, advance phase, or status check",
+            "enum": [
+              "lifecycle",
+              "validate",
+              "advance",
+              "status"
+            ],
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "storyId": {
+            "description": "Story note ID (e.g., backlog.agents.ship-agent)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "storyId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_agent_story"
+    },
+    {
+      "description": "Run the Telemetry agent to query telemetry data, detect patterns, triage failures, and suggest improvements. Returns analysis summaries with actionable suggestions.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "query": {
+            "description": "Natural language telemetry question (e.g., \"what failed today?\", \"show me provenance block patterns\", \"generate a summary report\")",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "rks_agent_telemetry"
+    },
+    {
+      "description": "Run the Product Owner agent to validate story readiness. Returns structured verdict with quality/completeness scores, gap detection, and RAG benchmarking.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "problemId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "problemId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_agent_validate_story"
+    },
+    {
+      "description": "Scan src/ + KG and write a codemap for the project.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_analyze"
+    },
+    {
+      "description": "Pure file application: apply plan steps without git operations. Use this in CI or when git is managed separately.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "label": {
+            "description": "Plan slug/label to apply (uses latest if omitted)",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_apply"
+    },
+    {
+      "description": "Approve or reject a guardrail-critical plan after review.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "confirm": {
+            "description": "true to approve, false to reject",
+            "type": "boolean"
+          },
+          "planId": {
+            "description": "Plan ID from needs_approval response",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Optional reason (required for rejection)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "planId",
+          "confirm"
+        ],
+        "type": "object"
+      },
+      "name": "rks_approve"
+    },
+    {
+      "description": "Record an ARCH review's findings and receive the computed verdict. The verdict is DERIVED from a frozen finding ledger and a hard round cap, not asserted by the caller: round 1 freezes the ledger, later rounds may only shrink it, and findings first raised after round 1 are returned as deferred rather than blocking. The ledger is bound to the story's CONTENT, not its id — a material amendment to the body, targetFiles or testRequirements rebases it to round 1 with findings blocking again, and the round cap counts rounds per story VERSION. Rebase is derived from a content digest, never requested: there is no parameter that forces or suppresses it. This is the only permitted writer of arch_verdict, arch_round, arch_ledger, arch_deferred, arch_findings_count, arch_subject, arch_subject_version, arch_total_rounds, arch_round_findings and the arch-approved phase. The phase follows the verdict in BOTH directions: an approved verdict sets phase arch-approved, and a needs-revision verdict on a story at phase arch-approved returns its phase to ready (retraction). A needs-revision verdict never changes any other phase — draft and ready stay as they are, and planned, executing and executed are not demoted. arch_total_rounds and arch_round_findings are ADVISORY: they record cumulative review cost across rebases and never affect the verdict, the cap or the phase. Plan-ready create gate: the handler also runs rks_plan_ready's own create_target_no_authorable_block predicate on the story on every call and refuses approved while any such issue exists; those issues are reported in gateIssues (always present, [] when none), counted in findingsCount, never written to arch_ledger or arch_deferred, and neither the ledger nor the round cap can clear them — only amending the story does. No other plan_ready check affects the verdict.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "findings": {
+            "description": "Findings raised THIS round. Identity is derived from { item, file } — a key you supply is ignored, so a round-1 finding cannot be renamed to keep it blocking.",
+            "items": {
+              "properties": {
+                "detail": {
+                  "description": "What is wrong and what would resolve it",
+                  "type": "string"
+                },
+                "file": {
+                  "description": "Repo-relative path the finding anchors to",
+                  "type": "string"
+                },
+                "item": {
+                  "description": "Checklist item number",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "item",
+                "file"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "storyId": {
+            "description": "Story note filename, e.g. backlog.feat.my-story",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "storyId",
+          "findings"
+        ],
+        "type": "object"
+      },
+      "name": "rks_arch_verdict"
+    },
+    {
+      "description": "Repair branch state by resetting to remote. Use when a branch has unwanted commits.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "branch": {
+            "description": "Branch to repair",
+            "type": "string"
+          },
+          "confirm": {
+            "description": "Required to actually reset",
+            "type": "boolean"
+          },
+          "dryRun": {
+            "description": "Preview changes without applying",
+            "type": "boolean"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "target": {
+            "description": "Reset target (default: origin/<branch>)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "branch"
+        ],
+        "type": "object"
+      },
+      "name": "rks_branch_repair"
+    },
+    {
+      "description": "Dry-run preview of a Jira/Confluence channel publish. Lists notes whose channel: frontmatter has publish: true and whether each would create or update a remote item. Read-only: writes nothing and does not contact Jira or Confluence (remoteChecked is always false).",
+      "inputSchema": {
+        "properties": {
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "system": {
+            "description": "Only preview notes for this channel system",
+            "enum": [
+              "jira",
+              "confluence"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_channel_preview"
+    },
+    {
+      "description": "Switch to an existing branch. Use rks_git_branch to create new branches.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "branch": {
+            "description": "Branch name to switch to",
+            "type": "string"
+          },
+          "force": {
+            "description": "Force checkout even with local changes (discards changes)",
+            "type": "boolean"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "branch"
+        ],
+        "type": "object"
+      },
+      "name": "rks_checkout"
+    },
+    {
+      "description": "Cherry-pick commits from other branches.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "abort": {
+            "description": "Abort in-progress cherry-pick",
+            "type": "boolean"
+          },
+          "commit": {
+            "description": "Commit SHA to cherry-pick",
+            "type": "string"
+          },
+          "noCommit": {
+            "description": "Stage changes only, don't commit",
+            "type": "boolean"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_cherry_pick"
+    },
+    {
+      "description": "Complete feature→working branch cycle. Syncs with origin (unless local-only), deletes feature branch. Uses branch config. Refuses if the working branch has unpushed local commits unless discardLocalCommits is true.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "discardLocalCommits": {
+            "description": "Required to discard unpushed local commits on the working branch",
+            "type": "boolean"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_cycle_complete"
+    },
+    {
+      "description": "Execute a plan: create git branch and apply plan steps. Runs tests before/after by default. Respects guardrail levels (guardrail-critical blocks execution).",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "autoCommit": {
+            "description": "Commit changes even when tests are skipped (default: false)",
+            "type": "boolean"
+          },
+          "dryRun": {
+            "description": "Preview changes without applying them (default: false)",
+            "type": "boolean"
+          },
+          "expectedAnchor": {
+            "description": "Git anchor (@sha or @sha+dirty, as returned by rks_exhaustive_search) asserting which working tree was verified. Refuses with status anchor_mismatch on a different commit, or when a clean tree was asserted and the tree is dirty. A +dirty expectation proceeds as anchorMatch dirty-weak — two dirty trees at one HEAD are not the same tree, so it is a weaker guarantee than exact; a +dirty expectation against a clean tree is also dirty-weak, since the expectation itself was stated loosely. The leading @ is optional. If the working-tree anchor cannot be computed at all, the call refuses rather than proceeding unverified.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Plan slug/label to execute (uses latest if omitted)",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "skipTests": {
+            "description": "Skip running tests before and after apply",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_exec"
+    },
+    {
+      "description": "Abort an incomplete exec run and clean up state. Use when exec fails mid-execution.",
+      "inputSchema": {
+        "properties": {
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Optional reason for aborting",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_exec_abort"
+    },
+    {
+      "description": "Governed, deterministic, EXHAUSTIVE literal search over a scoped path. Returns every cited file:line match (verbatim text + git-state anchor) — the precision complement to the semantic rks_rag_query for completeness checks. Protected: requires a Governor session token; bounded: a scoped 'path' is required.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "countOnly": {
+            "description": "Bounded mode: return filenames + match counts only, without full match text.",
+            "type": "boolean"
+          },
+          "maxResults": {
+            "description": "Cap on returned hits (default 1000).",
+            "type": "number"
+          },
+          "path": {
+            "description": "Scoped path under the project root to search within (REQUIRED — searches are bounded, never repo-wide).",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "Literal string to search for. Matching is a CASE-SENSITIVE substring test, so a zero result may mean the pattern differs in case from the source rather than that the content is absent.",
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "pattern",
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "rks_exhaustive_search"
+    },
+    {
+      "description": "Fetch a COMPLETE raw document from an https URL (curl mode) — for reading a full external doc/spec when RAG snippets are not enough. Egress posture is per-project via .rks/project.json fetchRaw.mode: 'allowlist' (default) enforces a default-deny host allowlist (fetchRaw.allowedHosts); 'open' allows any public host for casual use. EITHER WAY the security floor always applies: HTTPS-only, SSRF-guarded (internal/loopback/link-local refused), size-capped + timed out, GET-only, recorded in the write-ledger. Not a crawler; no auth; no JS render.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "maxBytes": {
+            "description": "Optional response size cap (bytes).",
+            "type": "number"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "description": "Optional request timeout override (ms), clamped to a ceiling.",
+            "type": "number"
+          },
+          "url": {
+            "description": "The https URL to fetch. In default 'allowlist' mode the host must be in fetchRaw.allowedHosts; in 'open' mode any public host is allowed (SSRF floor still applies).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "url"
+        ],
+        "type": "object"
+      },
+      "name": "rks_fetch_raw"
+    },
+    {
+      "description": "Create a feature branch following naming conventions. Validates branch name and ensures clean working tree.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "name": {
+            "description": "Branch name (without type prefix)",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "type": {
+            "description": "Branch type prefix (default: feature)",
+            "enum": [
+              "feature",
+              "fix",
+              "refactor",
+              "docs",
+              "chore",
+              "rks"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "rks_git_branch"
+    },
+    {
+      "description": "Stage and commit changes. Two modes, exactly one required. Structured mode (message): builds a conventional-commit subject type(scope): message; appends a Co-Authored-By trailer only when coAuthor is supplied. Verbatim mode (rawMessage): commits the complete message (subject, body and trailers) byte-for-byte, with no type(scope) prefix and no trailer added; it requires a non-empty files list and is scoped to those paths only (other staged paths stay staged and uncommitted), cannot be combined with type, scope, message or coAuthor, and returns committedPaths read back from git. A staged rename needs both the old and the new path listed in files.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "coAuthor": {
+            "description": "The caller's own identity as 'Name <email>', written to a Co-Authored-By trailer. Omitted means no trailer.",
+            "type": "string"
+          },
+          "files": {
+            "description": "Specific files to commit. If omitted, all changes are staged (explicit stageAll opt-in at the tool layer); an empty array is rejected",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "message": {
+            "description": "Structured mode: commit message (without type prefix). Exactly one of message or rawMessage is required.",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "rawMessage": {
+            "description": "Verbatim mode: the complete commit message (subject, body, trailers), committed byte-for-byte with no prefix and no added trailer. Requires files; cannot be combined with message, type, scope or coAuthor.",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Optional scope (e.g., backlog, planner)",
+            "type": "string"
+          },
+          "type": {
+            "description": "Commit type (default: feat)",
+            "enum": [
+              "feat",
+              "fix",
+              "refactor",
+              "docs",
+              "chore",
+              "test"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_git_commit"
+    },
+    {
+      "description": "Merge current branch to target branch. Detects conflicts and aborts gracefully.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "deleteBranch": {
+            "description": "Delete source branch after merge",
+            "type": "boolean"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "targetBranch": {
+            "description": "Branch to merge into (default: staging)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_git_merge"
+    },
+    {
+      "description": "Run git preflight checks: dirty tree, worktree cleanup, branch verification",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "autoStash": {
+            "description": "Auto-stash dirty tree instead of just reporting (default: false)",
+            "type": "boolean"
+          },
+          "cleanWorktrees": {
+            "description": "Auto-remove orphaned worktrees (default: true)",
+            "type": "boolean"
+          },
+          "expectedBranch": {
+            "description": "Expected branch name (optional — verifies current branch matches)",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_git_preflight"
+    },
+    {
+      "description": "Push a branch to origin remote. Defaults to current branch if not specified.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "branch": {
+            "description": "Branch to push (defaults to current branch)",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_git_push"
+    },
+    {
+      "description": "Get git state (branch, clean, ahead/behind) for informed workflow decisions.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_git_state"
+    },
+    {
+      "description": "Initialize Governor session and obtain authentication token",
+      "inputSchema": {
+        "properties": {
+          "flowType": {
+            "description": "Explicit flow type override. If omitted, inferred from problemId (present → 'story', absent → 'open').",
+            "enum": [
+              "story",
+              "open",
+              "qa",
+              "ship",
+              "ops"
+            ],
+            "type": "string"
+          },
+          "problemId": {
+            "description": "Backlog story ID — presence triggers 'story' flow, absence triggers 'open' flow",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "reset": {
+            "description": "Force a fresh chain. Re-entering a live session that carries the SAME problemId RESUMES it at its current chain state by default, because discarding a chain silently costs a full refine → plan → exec run. Exception: a story-flow session at 'planned' whose plan is stale against the story (the story content changed since rks_plan was admitted, reason story_changed_since_plan, or its phase no longer admits rks_exec, reason chain_phase_mismatch) is not resumed. Init ends it and returns a NEW token with mode 'stale_reset'; or, when ending it would restore guardrails or pop a pending stash, init returns ok: false with reason 'stale_reset_blocked' and the OLD token still live, and passing reset: true is then the caller's decision. Pass reset: true to start the chain over instead; it ends the old session and returns a NEW token. Needed when re-running a step the current state does not admit — e.g. a QA re-run, whose chain begins at rks_agent_research, which qa_assessing does not allow.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_governor_init"
+    },
+    {
+      "description": "ABORT an off-rail session WITHOUT shipping: hard reset to the session's start commit + clean of new untracked files, hooks restored, NO commit, branch, PR, merge, or push. REFUSES rather than discarding when the working tree was ALREADY DIRTY when the session opened — the reset targets a COMMIT, so it would also destroy uncommitted work that predated the session and was never this session's. On refusal it returns ok:false with the pre-existing paths, changes nothing, and leaves the session active; pass discardPreExisting: true to destroy them deliberately. Use this to throw away off-rail work instead of rks_guardrails_on (which always commits/ships). Gitignored paths (node_modules, .env, RAG index) are preserved.",
+      "inputSchema": {
+        "properties": {
+          "discardPreExisting": {
+            "description": "Explicit opt-in to ALSO discard uncommitted work that already existed when the session opened. Absent or false, such work causes a refusal and nothing is discarded.",
+            "type": "boolean"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_guardrails_abort"
+    },
+    {
+      "description": "Temporarily disable guardrails hooks for off-rail work. Logs session start with reason and git state. If problemId is provided, code writes are scoped to the story's targetFiles. If problemId is null, session is READ-ONLY for code (meta/config files still allowed). Call rks_guardrails_on when done to restore hooks.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "problemId": {
+            "description": "Story ID (e.g., 'backlog.feat.my-feature') to scope code writes. Story's targetFiles define allowed files. If omitted, session is read-only for code.",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why guardrails are being disabled (for audit log)",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Which tier of hooks to disable. 'all' (default): disables everything. 'write': keeps read+system hooks active for research guidance. 'read': disables only read-tier hooks.",
+            "enum": [
+              "all",
+              "write",
+              "read"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "name": "rks_guardrails_off"
+    },
+    {
+      "description": "Restore guardrails hooks after off-rail work. Logs session end, detects changes, and returns workflow guidance (commit → PR → merge → complete_cycle).",
+      "inputSchema": {
+        "properties": {
+          "coAuthor": {
+            "description": "The caller's own identity as 'Name <email>', written to a Co-Authored-By trailer on the off-rail auto-ship commit. Omitted means no trailer.",
+            "type": "string"
+          },
+          "enforcementOverride": {
+            "description": "Proceed past an enforcement-gate halt. The reason is REQUIRED and is recorded in shipSteps and telemetry — an override that leaves no trace would be a silent bypass.",
+            "properties": {
+              "enabled": {
+                "description": "Must be true",
+                "enum": [
+                  true
+                ],
+                "type": "boolean"
+              },
+              "reason": {
+                "description": "Why the halt is being overridden (non-empty)",
+                "type": "string"
+              }
+            },
+            "required": [
+              "enabled",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "restoreFromTemplate": {
+            "description": "Explicit opt-in: when .routekit/hooks.bak is missing, restore the hook tiers from the template instead of failing closed with hooks_backup_missing. The response then states the restored hook set came from the template (hooksSource: 'template'), not the backup. Absent or false, a missing hooks.bak returns ok:false, keeps guard state off and never auto-ships.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_guardrails_on"
+    },
+    {
+      "description": "Report guardrail policy coverage and scenario matching for a label.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_guardrails_simulate"
+    },
+    {
+      "description": "Check guardrails status and session history. Returns active session (if any) and recent sessions.",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "description": "Number of sessions to return (default: 10)",
+            "type": "number"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_guardrails_status"
+    },
+    {
+      "description": "Create a new RKS project from base template",
+      "inputSchema": {
+        "properties": {
+          "branchModel": {
+            "description": "Branch workflow: 2-branch (feature → main) or 3-branch (feature → staging → main). Default: 3-branch",
+            "enum": [
+              "2-branch",
+              "3-branch"
+            ],
+            "type": "string"
+          },
+          "dev": {
+            "description": "Use local file path for development/UAT (default: false)",
+            "type": "boolean"
+          },
+          "parentDir": {
+            "description": "Parent directory (default: ..)",
+            "type": "string"
+          },
+          "projectName": {
+            "description": "Name of the project (becomes directory name)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectName"
+        ],
+        "type": "object"
+      },
+      "name": "rks_init"
+    },
+    {
+      "description": "[DEPRECATED — use /rks-onboard instead. Will be removed in v0.21.0] Run or continue project onboarding interview. Forwards to rks_onboarder. Use reset:true to restart.",
+      "inputSchema": {
+        "properties": {
+          "projectId": {
+            "description": "Project identifier",
+            "type": "string"
+          },
+          "reset": {
+            "description": "Set true to restart interview",
+            "type": "boolean"
+          },
+          "responses": {
+            "description": "Responses collected so far",
+            "type": "object"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_interview"
+    },
+    {
+      "description": "Resolve a dot-notation key from a project's KG.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_kg_query"
+    },
+    {
+      "description": "Save an agent memory as notes/memories.<slug>.md and commit it as `docs(memory): save <slug>` (commit strictly before embed). Callable without a Governor token. Writes nothing else: there is no path input, the slug must match /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/ with no '..', and the save is refused on a protected branch. The project root comes from the server's environment (ROUTEKIT_PROJECT_ROOT), not from projectId.",
+      "inputSchema": {
+        "properties": {
+          "content": {
+            "description": "Markdown body of the memory note",
+            "type": "string"
+          },
+          "desc": {
+            "description": "Optional note description",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier (schema parity only; does not select the write root)",
+            "type": "string"
+          },
+          "slug": {
+            "description": "Memory slug; the note id becomes memories.<slug>. Allowlist: /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/, no '..'.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Optional note title (default: slug)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "slug",
+          "content"
+        ],
+        "type": "object"
+      },
+      "name": "rks_memory_save"
+    },
+    {
+      "description": "Run the rks onboarding flow. Guides new users through the permission model, first story, first build, and first ship. Use stage to resume at a specific step. Use reset:true to restart.",
+      "inputSchema": {
+        "properties": {
+          "bounce": {
+            "description": "Re-run the current stage instead of advancing",
+            "type": "boolean"
+          },
+          "projectId": {
+            "description": "Project identifier",
+            "type": "string"
+          },
+          "reset": {
+            "description": "Reset onboarder state and restart from welcome",
+            "type": "boolean"
+          },
+          "responses": {
+            "description": "User responses for the current stage",
+            "type": "object"
+          },
+          "resume": {
+            "description": "Resume from last incomplete stage",
+            "type": "boolean"
+          },
+          "skipStage": {
+            "description": "Skip the current stage and advance to the next one",
+            "type": "boolean"
+          },
+          "skipTour": {
+            "description": "Skip the informational stages and go straight to first story",
+            "type": "boolean"
+          },
+          "stage": {
+            "description": "Stage to run (omit to resume from last incomplete stage)",
+            "enum": [
+              "welcome",
+              "expectations",
+              "stance",
+              "first_story",
+              "first_build",
+              "first_ship",
+              "next_steps"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_onboarder"
+    },
+    {
+      "description": "Advance a story to 'integrated' after an off-rail ship whose phase advance was suppressed by the review gate. EVIDENCE-BOUND: refuses unless a commit reachable from the integration branch carries either the line-exact trailer 'Story: <storyId>' or, for pre-0.66 exec commits, the exact legacy subject line 'feat(exec): <storyId>'. The trailer is preferred when both exist, and the result's evidence.form reports which matched ('trailer' or 'legacy_exec_subject'). Refuses on an unreadable git history rather than treating that as absence. Reports an already-advanced story as a no-op, never as a repair. A successful repair commits the story note and pushes it only when the integration branch is checked out; on any other branch it makes no commit and reports note.skipped with reason 'not_on_integration_branch'.",
+      "inputSchema": {
+        "properties": {
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "storyId": {
+            "description": "Story note filename, e.g. backlog.fix.my-story",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "storyId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_phase_repair"
+    },
+    {
+      "description": "Generate a plan from a backlog item (problemId) or free-text task. Returns structured JSON with runId, planPath, and steps.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "autoEmbed": {
+            "description": "Auto-embed when RAG is stale (default: true)",
+            "type": "boolean"
+          },
+          "label": {
+            "description": "Optional label for the run slug",
+            "type": "string"
+          },
+          "problemId": {
+            "description": "Backlog item ID (e.g., backlog.foo.bar)",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "task": {
+            "description": "Free-text task description (alternative to problemId)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_plan"
+    },
+    {
+      "description": "Validate story readiness before planning. Checks targetFiles exist, SEARCH patterns are verbatim and unique. Returns issues list for refinement.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "problemId": {
+            "description": "Backlog item ID to validate (e.g., backlog.foo.bar)",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "problemId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_plan_ready"
+    },
+    {
+      "description": "Validate plan quality. Checks for destructive edits (edit_file on large files) and semantic preservation (missing exports/imports). Returns errors, warnings, and suggestions.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "label": {
+            "description": "Plan slug/label (uses latest if omitted)",
+            "type": "string"
+          },
+          "problemId": {
+            "description": "Story ID — used to find correct run directory after server restart",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_plan_review"
+    },
+    {
+      "description": "Validate project prerequisites before running rks workflow. Checks project attached, notes dir exists, RAG initialized, API key set, GitHub remote configured.",
+      "inputSchema": {
+        "properties": {
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_preflight"
+    },
+    {
+      "description": "Get project metadata, project.json, and KG for a projectId.",
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "rks_project_get"
+    },
+    {
+      "description": "Scaffold a new Routekit project from a stack template (dry-run by default).",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "apply": {
+            "description": "Set true to apply scaffold",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "New project id/slug",
+            "type": "string"
+          },
+          "path": {
+            "description": "Absolute or relative target path",
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "register": {
+            "description": "Append to projects/index.jsonl after creation (requires apply=true)",
+            "type": "boolean"
+          },
+          "stack": {
+            "description": "Stack template id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "id",
+          "stack",
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "rks_project_init"
+    },
+    {
+      "description": "Promote changes from one branch to another (e.g., dev → staging). Useful for controlled CI/preview builds without full ship workflow.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "from": {
+            "description": "Source branch (defaults to current branch)",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "push": {
+            "description": "Push target branch after merge (default: true)",
+            "type": "boolean"
+          },
+          "to": {
+            "description": "Target branch (defaults to integration branch from config)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_promote"
+    },
+    {
+      "description": "Publish filtered project snapshot to a remote repository using a publish profile. Uses git archive with exclude patterns for clean filtering.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "branch": {
+            "description": "Target branch (default: main)",
+            "type": "string"
+          },
+          "dryRun": {
+            "description": "Show what would be published without pushing",
+            "type": "boolean"
+          },
+          "message": {
+            "description": "Commit message for the publish",
+            "type": "string"
+          },
+          "profile": {
+            "description": "Publish profile name (default: app-only)",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "remote": {
+            "description": "Remote name to push to",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "remote"
+        ],
+        "type": "object"
+      },
+      "name": "rks_publish"
+    },
+    {
+      "description": "List available publish profiles and configured remotes for a project.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_publish_profiles"
+    },
+    {
+      "description": "Compact LanceDB to reclaim disk space from transaction logs and deletions.",
+      "inputSchema": {
+        "properties": {
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_rag_compact"
+    },
+    {
+      "description": "Embed project notes into the LanceDB database (skips z_archive.* automatically). Pass files array for incremental updates.",
+      "inputSchema": {
+        "properties": {
+          "files": {
+            "description": "Specific files to re-embed (incremental update)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "glob": {
+            "description": "Optional glob override for selecting notes",
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_rag_embed"
+    },
+    {
+      "description": "Initialize the LanceDB database for a project's note embeddings. Without reset, this only creates or opens the database and never deletes rows or the embed manifest. reset: true is DESTRUCTIVE: it deletes every row in the embeddings table and clears the embed manifest; it is refused while an embed holds the lock, and must be followed by a full rks_rag_embed (no files) to rebuild the index.",
+      "inputSchema": {
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "reset": {
+            "description": "DESTRUCTIVE: delete every row in the embeddings table and clear the embed manifest before a full re-embed. Default false.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_rag_init"
+    },
+    {
+      "description": "Query the LanceDB embeddings and return the top-k matching note chunks.",
+      "inputSchema": {
+        "properties": {
+          "k": {
+            "description": "Optional number of results (default 5, max 20)",
+            "type": "number"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "q": {
+            "type": "string"
+          },
+          "role": {
+            "description": "Agent role for capability-based fidelity filtering. Scout=L0 metadata, Planner=L2 redacted, Executor=L1 abstracted, Auditor=L3 full.",
+            "enum": [
+              "scout",
+              "planner",
+              "executor",
+              "auditor"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "q"
+        ],
+        "type": "object"
+      },
+      "name": "rks_rag_query"
+    },
+    {
+      "description": "Analyze a backlog story and suggest refinements to improve plan generation success. Returns suggestions for adding targetFiles, code snippets, or decomposition.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "context": {
+            "description": "Optional additional context (error messages, etc.)",
+            "type": "string"
+          },
+          "problemId": {
+            "description": "Backlog item ID to refine (e.g., backlog.foo.bar)",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "trigger": {
+            "description": "What triggered refinement need",
+            "enum": [
+              "plan_failed",
+              "plan_rejected",
+              "exec_failed",
+              "test_failed",
+              "design"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "problemId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_refine"
+    },
+    {
+      "description": "Apply refinement suggestions to a backlog story. Updates targetFiles, adds code snippets, or decomposes into child stories.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "problemId": {
+            "description": "Backlog item ID to update",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "refinements": {
+            "description": "Array of refinement actions to apply",
+            "items": {
+              "additionalProperties": true,
+              "properties": {
+                "data": {
+                  "description": "Refinement-specific data",
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "fix_duplicate_frontmatter",
+                    "add_test_requirements",
+                    "fix_vague_tests",
+                    "add_target_files",
+                    "upgrade_target_files_format",
+                    "fix_target_files",
+                    "fix_search_pattern",
+                    "disk_fetch_context",
+                    "add_code_snippet",
+                    "create_file_directive",
+                    "add_test_exemplar",
+                    "plan_staging",
+                    "review_plan_output",
+                    "add_search_pattern",
+                    "verify_search_patterns",
+                    "fix_numeric_assertion",
+                    "fix_test_assertion",
+                    "clarify_ac",
+                    "decompose",
+                    "acknowledge_multi_file",
+                    "acknowledge_destructive_rewrite"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "projectId",
+          "problemId",
+          "refinements"
+        ],
+        "type": "object"
+      },
+      "name": "rks_refine_apply"
+    },
+    {
+      "description": "Release staging to main with version bump, changelog, and tag. Transitions integrated stories to released.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "changelog": {
+            "description": "Release notes (optional)",
+            "type": "string"
+          },
+          "enforcementOverride": {
+            "description": "Deliberately release past a blocking CI verdict. Requires a reason — an override that leaves no trace is indistinguishable from the fail-open this gate exists to prevent.",
+            "properties": {
+              "enabled": {
+                "description": "Must be true",
+                "enum": [
+                  true
+                ],
+                "type": "boolean"
+              },
+              "reason": {
+                "description": "Why the CI gate is being overridden (non-empty; recorded in the response and in telemetry)",
+                "type": "string"
+              }
+            },
+            "required": [
+              "enabled",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version bump type (default: patch)",
+            "enum": [
+              "patch",
+              "minor",
+              "major"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_release"
+    },
+    {
+      "description": "Reset HEAD to a specific state. Use soft/mixed/hard modes.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "confirm": {
+            "description": "Required for hard reset",
+            "type": "boolean"
+          },
+          "mode": {
+            "description": "Reset mode (default: mixed)",
+            "enum": [
+              "soft",
+              "mixed",
+              "hard"
+            ],
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "target": {
+            "description": "Reset target (commit SHA, HEAD~N, branch)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_reset"
+    },
+    {
+      "description": "Resolve merge/rebase conflicts with ours/theirs/abort strategy.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "files": {
+            "description": "Specific files to resolve (optional, defaults to all)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "strategy": {
+            "description": "Resolution strategy (default: theirs)",
+            "enum": [
+              "ours",
+              "theirs",
+              "abort"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_resolve_conflict"
+    },
+    {
+      "description": "Restore working tree files. Use to discard changes or unstage files.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "files": {
+            "description": "File(s) to restore",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "source": {
+            "description": "Restore from specific commit/branch",
+            "type": "string"
+          },
+          "staged": {
+            "description": "Restore from staging area (--staged)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId",
+          "files"
+        ],
+        "type": "object"
+      },
+      "name": "rks_restore"
+    },
+    {
+      "description": "Revert a commit by creating a new commit that undoes changes.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "commit": {
+            "description": "Commit SHA to revert",
+            "type": "string"
+          },
+          "noCommit": {
+            "description": "Stage changes only, don't commit",
+            "type": "boolean"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "commit"
+        ],
+        "type": "object"
+      },
+      "name": "rks_revert"
+    },
+    {
+      "description": "Run agent-based code review on current branch. Spawns a separate reviewer with isolated context (diff + story + RAG only) to evaluate changes before merge.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "problemId": {
+            "description": "Backlog story ID (for AC coverage checking)",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "targetBranch": {
+            "description": "Branch to diff against (default: staging)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_review"
+    },
+    {
+      "description": "Ship changes in one command: commit → branch → PR → merge → cycle_complete. Use after guardrails-off work or any time you have uncommitted changes to ship.",
+      "inputSchema": {
+        "properties": {
+          "branchName": {
+            "description": "Branch name (auto-generated from message if omitted)",
+            "type": "string"
+          },
+          "branchType": {
+            "description": "Branch type prefix (default: feature)",
+            "enum": [
+              "feature",
+              "fix",
+              "refactor",
+              "docs",
+              "chore"
+            ],
+            "type": "string"
+          },
+          "files": {
+            "description": "Specific files to commit. If omitted, all changes are staged (explicit stageAll opt-in at the tool layer); an empty array is rejected",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "message": {
+            "description": "Commit message (without type prefix)",
+            "type": "string"
+          },
+          "prTitle": {
+            "description": "PR title (auto-generated if omitted)",
+            "type": "string"
+          },
+          "problemId": {
+            "description": "Backlog story ID to mark as implemented",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Optional scope (e.g., interview, planner)",
+            "type": "string"
+          },
+          "type": {
+            "description": "Commit type (default: feat)",
+            "enum": [
+              "feat",
+              "fix",
+              "refactor",
+              "docs",
+              "chore",
+              "test"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "message"
+        ],
+        "type": "object"
+      },
+      "name": "rks_ship"
+    },
+    {
+      "description": "Merge a PR to staging (squash merge, delete branch). Updates backlog status if problemId provided.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "prNumber": {
+            "description": "PR number to merge (uses current branch PR if omitted)",
+            "type": "number"
+          },
+          "problemId": {
+            "description": "Backlog problem ID to mark as implemented",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Required when problemId is omitted - justification for unlinked merge",
+            "enum": [
+              "hotfix",
+              "docs-only",
+              "infrastructure",
+              "off-rail"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_staging_merge"
+    },
+    {
+      "description": "Create a pull request for staging changes using git tools (no auto-merge).",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "autoMerge": {
+            "default": false,
+            "description": "Enable automatic merge after PR (default: false)",
+            "type": "boolean"
+          },
+          "problemId": {
+            "description": "Backlog story ID - auto-marks as implemented before PR creation",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Required when problemId is omitted - justification for unlinked PR",
+            "enum": [
+              "hotfix",
+              "docs-only",
+              "infrastructure",
+              "off-rail"
+            ],
+            "type": "string"
+          },
+          "targetBranch": {
+            "description": "Target branch for PR (default: staging)",
+            "type": "string"
+          },
+          "title": {
+            "description": "PR title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_staging_pr"
+    },
+    {
+      "description": "Git stash operations: save, list, apply, pop, drop. Use for temporarily shelving changes.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "action": {
+            "description": "Stash action (default: save)",
+            "enum": [
+              "save",
+              "list",
+              "apply",
+              "pop",
+              "drop"
+            ],
+            "type": "string"
+          },
+          "includeUntracked": {
+            "description": "Include untracked files in save (default: false)",
+            "type": "boolean"
+          },
+          "message": {
+            "description": "Message for stash save",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "stashIndex": {
+            "description": "Stash index for apply/pop/drop (default: 0)",
+            "type": "number"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_stash"
+    },
+    {
+      "description": "Create a backlog story with optional template. Templates provide boilerplate targetFiles, structure, and acceptance criteria.",
+      "inputSchema": {
+        "properties": {
+          "desc": {
+            "description": "Brief description",
+            "type": "string"
+          },
+          "name": {
+            "description": "Story name (will be prefixed with backlog.feat.)",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "template": {
+            "description": "Template name: react-component, api-endpoint, cli-command",
+            "type": "string"
+          },
+          "title": {
+            "description": "Human-readable title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "rks_story_create"
+    },
+    {
+      "description": "Ship a story atomically: creates PR → merges → marks integrated. Call this after rks_exec instead of separate staging_pr/merge/cycle_complete calls.",
+      "inputSchema": {
+        "properties": {
+          "problemId": {
+            "description": "Problem ID to mark as integrated (optional)",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_story_ship"
+    },
+    {
+      "description": "Sync staging branch with origin before merge/release. Handles diverged branches via rebase or merge.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "strategy": {
+            "description": "Sync strategy (default: auto). push-only publishes a clean, strictly-ahead, notes-only integration branch and never pulls, rebases or merges; with a governor token push-only is forced and any other strategy is refused.",
+            "enum": [
+              "auto",
+              "rebase",
+              "merge",
+              "push-only"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_sync_staging"
+    },
+    {
+      "description": "Git tag operations: list, create, delete.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "action": {
+            "description": "Tag action (default: list)",
+            "enum": [
+              "list",
+              "create",
+              "delete"
+            ],
+            "type": "string"
+          },
+          "commit": {
+            "description": "Commit to tag (default: HEAD)",
+            "type": "string"
+          },
+          "message": {
+            "description": "Annotation message (creates annotated tag)",
+            "type": "string"
+          },
+          "name": {
+            "description": "Tag name (for create/delete)",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "Filter pattern for list",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_tag"
+    },
+    {
+      "description": "Export a project's telemetry to a shareable, REDACTED bundle (.json + .md) for UAT reports or attaching to a GitHub issue. Scrubs secrets (API keys, tokens, session UUIDs, absolute paths), reuses the cost-report + query readers. Local file output only — no upload.",
+      "inputSchema": {
+        "properties": {
+          "outDir": {
+            "description": "Optional output directory (default <projectRoot>/.rks/exports).",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "storyId": {
+            "description": "Optional — scope the export to a single story/problem ID.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_telemetry_export"
+    },
+    {
+      "description": "Query telemetry events with filtering by type, date range, and correlationId.",
+      "inputSchema": {
+        "properties": {
+          "correlationId": {
+            "description": "Filter by correlation ID",
+            "type": "string"
+          },
+          "endDate": {
+            "description": "ISO 8601 end date",
+            "type": "string"
+          },
+          "format": {
+            "description": "Output format",
+            "enum": [
+              "json",
+              "summary"
+            ],
+            "type": "string"
+          },
+          "lastNCycles": {
+            "description": "Restrict to the last N completed cycles",
+            "type": "number"
+          },
+          "limit": {
+            "description": "Max events to return (default 100, max 1000)",
+            "type": "number"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "since": {
+            "description": "Relative lookback window (e.g. '7d', '24h')",
+            "type": "string"
+          },
+          "startDate": {
+            "description": "ISO 8601 start date",
+            "type": "string"
+          },
+          "type": {
+            "description": "Filter by event type (e.g., plan.start, exec.failed)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_telemetry_query"
+    },
+    {
+      "description": "Generate aggregate telemetry reports: operation summaries, failure breakdowns, daily trends.",
+      "inputSchema": {
+        "properties": {
+          "endDate": {
+            "description": "ISO 8601 end date",
+            "type": "string"
+          },
+          "lastNCycles": {
+            "description": "Restrict to the last N completed cycles",
+            "type": "number"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "reportType": {
+            "description": "Report type (default: summary)",
+            "enum": [
+              "summary",
+              "failures",
+              "trends"
+            ],
+            "type": "string"
+          },
+          "since": {
+            "description": "Relative lookback window (e.g. '7d', '24h')",
+            "type": "string"
+          },
+          "startDate": {
+            "description": "ISO 8601 start date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_telemetry_report"
+    },
+    {
+      "description": "List stack templates (stackId, displayName, description, official flag, kg path).",
+      "inputSchema": {
+        "properties": {
+          "prefix": {
+            "description": "Optional stackId prefix filter",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "rks_templates_list"
+    },
+    {
+      "description": "Generate a token cost and efficiency report for a story or commit. Returns rawCost, efficientCost, wasteRatio, cacheRatio, healthBand (green/yellow/red; n/a with apiNoData: true when the scope has only subscription-billed token events), and phase-level breakdowns, all over API-billed token events. Subscription-billed (claude -p) usage is not API spend: it is reported separately in a subscription block (calls, tokens, estimatedApiEquivalentCost, cliCostUsdEstimate, byModel).",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "commitSha": {
+            "description": "Commit SHA to filter by. Required for scope=commit.",
+            "type": "string"
+          },
+          "format": {
+            "description": "Output format (default: json)",
+            "enum": [
+              "json",
+              "markdown",
+              "summary"
+            ],
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Scope to report on (default: story)",
+            "enum": [
+              "story",
+              "commit"
+            ],
+            "type": "string"
+          },
+          "storyId": {
+            "description": "Story/problem ID (e.g., backlog.feat.my-story). Required for scope=story.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_token_cost_report"
+    },
+    {
+      "description": "Validate story readiness with quality/completeness scoring. Returns structured verdict with per-project thresholds and RAG benchmarking against similar implemented stories.",
+      "inputSchema": {
+        "properties": {
+          "_governorToken": {
+            "description": "Governor session token for authorization",
+            "type": "string"
+          },
+          "problemId": {
+            "description": "Backlog item ID to validate (e.g., backlog.foo.bar)",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Project identifier from registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "problemId"
+        ],
+        "type": "object"
+      },
+      "name": "rks_validate_story"
+    }
+  ]
+}
