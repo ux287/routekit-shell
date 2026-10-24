@@ -1,0 +1,33 @@
+RouteKit Shell (rks)
+Copyright (C) 2025-2026 Vince Mease
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. See the LICENSE file for the full text.
+
+A separate commercial licence is available from the copyright holder for use
+that cannot accept the AGPL's network-copyleft terms.
+
+The project copyright is recorded HERE rather than being filled into the
+appendix template at the end of LICENSE. LICENSE is the unmodified FSF text
+and is never edited.
+
+Contributions are accepted under the Contributor License Agreement in CLA.md.
+
+---
+
+CONTRIBUTORS
+
+Changes accepted from outside the project are credited here. The public mirror
+is published as a single-commit snapshot, so git authorship does not survive
+publication; this file is the durable record of contribution.
+
+---
+
+THIRD-PARTY SOFTWARE
+
+This distribution depends on third-party packages, each licensed by its own
+authors under its own terms. Dependency licences are gated in CI by
+scripts/check-licenses.mjs against the policy in .routekit/license-policy.yaml.
+Installed dependency licences are recorded in package-lock.json.
