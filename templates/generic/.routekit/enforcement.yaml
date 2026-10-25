@@ -1,0 +1,43 @@
+# Project Enforcement Configuration
+# Controls which paths require orchestration (RAG) vs direct access
+
+# Paths that require orchestration (blocked for direct Read/Grep/Glob)
+# Use RAG MCP tools (rag_query, orchestrator_query) to access these
+knowledge_paths:
+  - /notes/
+  - /docs/
+
+# Code paths that require orchestration when enforce_code_rag is enabled
+# Forces semantic code search instead of direct file access
+code_knowledge_paths:
+  - /src/.*\.(js|mjs|ts|tsx)$
+  - /lib/.*\.(js|mjs|ts|tsx)$
+
+# Toggle for code RAG enforcement (default: false)
+# When true, code_knowledge_paths are blocked like knowledge_paths
+# Set to true once code is embedded in RAG
+enforce_code_rag: false
+
+# Paths explicitly allowed for direct access
+# These patterns take precedence over knowledge_paths AND code_knowledge_paths
+# Customize for your project structure
+allowed_paths:
+  - /\.claude/
+  - /\.routekit/
+  - /tests/
+  - /node_modules/
+  - /package\.json$
+  - /tsconfig\.json$
+  - /\.mcp\.json$
+  - /CLAUDE\.md$
+  - /README\.md$
+  - /\.env
+
+# Dendron enforcement
+# Block direct Write to notes/ and route to Dendron MCP tools
+dendron_paths:
+  - /notes/
+
+dendron_exceptions:
+  - /notes/drafts\./
+  - /notes/scratch\./
