@@ -1,0 +1,101 @@
+[
+  {
+    "id": "case-01-ada",
+    "query": "When was Ada Lovelace born?",
+    "ground_truth": "1815-12-10",
+    "retrieved_chunks": [
+      "Ada Lovelace (1815-12-10) was an English mathematician and writer, chiefly known for her work on Charles Babbage's proposed mechanical general-purpose computer, the Analytical Engine.",
+      "She is often regarded as the first computer programmer."
+    ]
+  },
+  {
+    "id": "case-02-paris",
+    "query": "What is the capital of France?",
+    "ground_truth": "Paris",
+    "retrieved_chunks": [
+      "The capital and most populous city of France is Paris.",
+      "Paris is a major European city and a global center for art, fashion, gastronomy and culture."
+    ]
+  },
+  {
+    "id": "case-03-water",
+    "query": "What is the chemical formula for water?",
+    "ground_truth": "H2O",
+    "retrieved_chunks": [
+      "Water has the chemical formula H2O, meaning two hydrogen atoms bonded to one oxygen atom.",
+      "It is a polar inorganic compound that is at room temperature a tasteless and odorless liquid."
+    ]
+  },
+  {
+    "id": "case-04-einstein-birth",
+    "query": "In what year was Albert Einstein born?",
+    "ground_truth": "1879",
+    "retrieved_chunks": [
+      "Albert Einstein was born in Ulm on 14 March 1879 and developed the theory of relativity.",
+      "He received the 1921 Nobel Prize in Physics."
+    ]
+  },
+  {
+    "id": "case-05-moon-mass",
+    "query": "Is the Moon more or less massive than Earth?",
+    "ground_truth": "less massive",
+    "retrieved_chunks": [
+      "The Moon is much less massive than the Earth. The mass of the Moon is about 0.0123 that of the Earth.",
+      "Because the Moon is smaller and less dense, its gravity is weaker."
+    ]
+  },
+  {
+    "id": "case-06-python-creator",
+    "query": "Who created the Python programming language?",
+    "ground_truth": "Guido van Rossum",
+    "retrieved_chunks": [
+      "Python was created by Guido van Rossum and first released in 1991.",
+      "It is a high-level, interpreted programming language."
+    ]
+  },
+  {
+    "id": "case-07-speed-light",
+    "query": "What is the speed of light in vacuum in m/s?",
+    "ground_truth": "299792458",
+    "retrieved_chunks": [
+      "The speed of light in vacuum is exactly 299792458 metres per second (approximately 3.00 x 10^8 m/s).",
+      "This is a fundamental constant in physics, denoted c."
+    ]
+  },
+  {
+    "id": "case-08-mount-everest",
+    "query": "What is the approximate elevation of Mount Everest?",
+    "ground_truth": "8848",
+    "retrieved_chunks": [
+      "Mount Everest's elevation is commonly recorded as 8,848 metres above sea level.",
+      "It is the Earth's highest mountain above sea level."
+    ]
+  },
+  {
+    "id": "case-09-js-release",
+    "query": "When was JavaScript first released?",
+    "ground_truth": "1995",
+    "retrieved_chunks": [
+      "JavaScript was first released in 1995, created by Brendan Eich while at Netscape.",
+      "It has since become a core technology of the World Wide Web."
+    ]
+  },
+  {
+    "id": "case-10-continent-australia",
+    "query": "Which continent is the country of Australia located in?",
+    "ground_truth": "Australia",
+    "retrieved_chunks": [
+      "Australia is both a country and a continent, occupying most of the Australian continent.",
+      "The mainland of Australia is sometimes referred to as the Australian continent."
+    ]
+  },
+  {
+    "id": "case-11-ambiguous-city",
+    "query": "Which city is larger: Springfield or Shelbyville?",
+    "ground_truth": "depends on region",
+    "retrieved_chunks": [
+      "Springfield and Shelbyville are common place names in fictional and real contexts; population depends on the specific region referenced.",
+      "Without region disambiguation, we cannot determine which one is larger."
+    ]
+  }
+]

@@ -1,0 +1,62 @@
+# Scope Policy for RouteKit Shell
+# Defines pre-flight checks before Edit/Write operations
+
+# Enable/disable pre-flight checks
+pre_edit_checks:
+  typecheck: true       # Run TypeScript type checking
+  lint: false           # Run ESLint (disabled by default - can be slow)
+  imports: true         # Verify imports resolve correctly
+
+# Commands to run for each check type
+# These are run from the project root directory
+commands:
+  typecheck: "npx tsc --noEmit --skipLibCheck"
+  lint: "npx eslint --quiet --max-warnings 0"
+  imports: "node -e \"process.exit(0)\""  # Placeholder - import validation handled in hook
+
+# File patterns to check (applies typecheck/lint to matching files only)
+# Uses regex patterns
+check_patterns:
+  typecheck:
+    - "\\.(ts|tsx)$"
+  lint:
+    - "\\.(js|mjs|ts|tsx)$"
+
+# Files/patterns to skip during pre-flight checks
+skip_patterns:
+  - "node_modules/"
+  - "\\.d\\.ts$"
+  - "dist/"
+  - "build/"
+  - "\\.test\\.(ts|js)$"
+  - "\\.spec\\.(ts|js)$"
+  - "\\.routekit/"
+  - "\\.claude/"
+  - "templates/"
+
+# Timeout for each check (milliseconds)
+check_timeout: 30000
+
+# Behavior on check failure
+on_failure:
+  typecheck: block      # block = prevent edit, warn = allow with warning
+  lint: warn
+  imports: warn
+
+# Batch checking - run checks after N edits instead of every edit
+# Useful for large refactoring sessions
+batch_checking:
+  enabled: false
+  batch_size: 5         # Run checks after every 5 edits
+  state_file: .routekit/scope-state.json
+
+# Protected paths require backlog note before modification
+# This creates an audit trail for changes to guardrails/sensitive files
+protected_paths:
+  - pattern: ".routekit/hooks/*.mjs"
+    require: backlog_note
+    reason: "Hook modifications change guardrail behavior - document intent first"
+  # Add more protected patterns as needed:
+  # - pattern: ".routekit/*.yaml"
+  #   require: backlog_note
+  #   reason: "Policy changes affect project behavior"
