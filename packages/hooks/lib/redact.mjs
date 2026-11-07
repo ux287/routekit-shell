@@ -1,0 +1,148 @@
+/**
+ * Redaction core for shareable telemetry exports.
+ *
+ * Pure, dependency-free, standalone-importable so the deferred opt-in "share anonymous
+ * usage data" uploader (notes/ideas.2026.07.05.telemetry-anon-share-mothership.md) can
+ * reuse the EXACT same scrubbing before any bytes leave the machine. Over-redaction is a
+ * feature here: a shared UAT/gh-issue artifact must never leak a secret, so we prefer to
+ * mask a benign id than risk a live token.
+ *
+ * Scrubs:
+ *  - Anthropic keys (sk-ant-…), OpenAI-style keys (sk-…), GitHub tokens (ghp_…, github_pat_…)
+ *  - Authorization: Bearer <token>
+ *  - v4 UUIDs (governor/session tokens — masked everywhere, incl. event ids)
+ *  - values under secret-looking KEYS (*_API_KEY / *_SECRET / *_TOKEN / password / authorization / sessionId / _governorToken)
+ *  - absolute filesystem paths (rewritten repo-relative when under projectRoot, else a <path> placeholder)
+ */
+
+const ANTHROPIC_KEY = /sk-ant-[A-Za-z0-9_-]{8,}/g;
+const GH_TOKEN = /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{16,}\b/g;
+const GH_PAT = /\bgithub_pat_[A-Za-z0-9_]{16,}\b/g;
+const OPENAI_KEY = /\bsk-[A-Za-z0-9]{20,}\b/g; // generic sk- key (after sk-ant- handled)
+const BEARER = /\bBearer\s+[A-Za-z0-9._~+/-]{12,}=*/gi;
+const UUID_V4 = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+const HOME_PATH = /(?:\/Users|\/home)\/[^/\s"']+\/[^\s"']*/g;
+
+// Key names whose VALUE must be masked wholesale, regardless of value shape.
+const SECRET_KEY = /(?:_?api[_-]?key|secret|password|passwd|authorization|bearer|access[_-]?token|refresh[_-]?token|_governortoken|session[_-]?id|sessiontoken|token)$/i;
+
+export const REDACTED = "[REDACTED]";
+
+/**
+ * Redact secret substrings from a string. Also rewrites absolute paths under `projectRoot`
+ * to repo-relative form, and other home-dir absolute paths to a <path> placeholder.
+ * @param {string} str
+ * @param {string} [projectRoot] absolute project root, rewritten to "." when present
+ */
+export function redactString(str, projectRoot) {
+  if (typeof str !== "string" || str.length === 0) return str;
+  let out = str;
+  // Project-root paths → repo-relative (do this before generic path scrubbing).
+  if (projectRoot && typeof projectRoot === "string") {
+    out = out.split(projectRoot).join(".");
+  }
+  out = out
+    .replace(ANTHROPIC_KEY, "[REDACTED-ANTHROPIC-KEY]")
+    .replace(GH_TOKEN, "[REDACTED-GH-TOKEN]")
+    .replace(GH_PAT, "[REDACTED-GH-TOKEN]")
+    .replace(BEARER, "Bearer [REDACTED]")
+    .replace(OPENAI_KEY, "[REDACTED-KEY]")
+    .replace(UUID_V4, "[REDACTED-UUID]")
+    .replace(HOME_PATH, "<path>");
+  return out;
+}
+
+/** True when a key name indicates its value is a secret to mask wholesale. */
+export function isSecretKey(key) {
+  return typeof key === "string" && SECRET_KEY.test(key);
+}
+
+/**
+ * Recursively redact a value (string / array / object). Secret-named keys have their value
+ * masked to [REDACTED]; every string (incl. nested) is scrubbed via redactString. Numbers,
+ * booleans and null pass through. Pure — returns a new value, never mutates the input.
+ * @param {*} value
+ * @param {object} [opts] { projectRoot }
+ */
+export function redactValue(value, opts = {}) {
+  const { projectRoot } = opts;
+  if (value == null) return value;
+  if (typeof value === "string") return redactString(value, projectRoot);
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.map((v) => redactValue(v, opts));
+  if (typeof value === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = isSecretKey(k) ? REDACTED : redactValue(v, opts);
+    }
+    return out;
+  }
+  return value;
+}
+
+/** Redact a single telemetry event object. Thin wrapper over redactValue for readability. */
+export function redactEvent(event, opts = {}) {
+  return redactValue(event, opts);
+}
+
+// ---------------------------------------------------------------------------
+// Identity-preserving variant — for the LIVE LOCAL store + agent output.
+//
+// redactString/redactValue/redactEvent above mask UUIDs and filesystem paths too, which is
+// correct for the shareable EXPORT bundle that leaves the machine but WRONG for the live
+// local telemetry store: masking v4 UUIDs collapses every event's correlationId/telemetryId
+// to the same string, breaking storage.read()'s correlationId filter, rks_telemetry_query,
+// and cost-report.mjs bucketing. These *SecretsOnly helpers mask secret VALUES only —
+// token shapes + secret-named keys + env-style NAME=value assignments — while PRESERVING
+// UUIDs and paths so correlation still works. See backlog.security.agent-env-secret-leak-redaction.
+// ---------------------------------------------------------------------------
+
+// Env-style secret assignment: KEY=value / KEY: value where the KEY name looks secret.
+// Masks the VALUE (keeps the name) so `GITHUB_TOKEN=abc123` → `GITHUB_TOKEN=[REDACTED]` even
+// when the value is NOT itself token-shaped — the gap that let GITHUB_..._TOKEN=<plain> through.
+const NAME_VALUE_SECRET =
+  /\b([A-Za-z][A-Za-z0-9_]*(?:token|key|secret|password|passwd|credential)[A-Za-z0-9_]*)(\s*[:=]\s*)(["']?)[^\s"',;}]+/gi;
+
+/**
+ * Scrub secret VALUES from a string WITHOUT masking UUIDs or filesystem paths.
+ * Use on the live local store + agent output, where correlationId/telemetryId (v4 UUIDs)
+ * and paths must survive. Contrast redactString, which additionally masks UUIDs/paths.
+ */
+export function redactStringSecretsOnly(str) {
+  if (typeof str !== "string" || str.length === 0) return str;
+  return str
+    .replace(ANTHROPIC_KEY, "[REDACTED-ANTHROPIC-KEY]")
+    .replace(GH_TOKEN, "[REDACTED-GH-TOKEN]")
+    .replace(GH_PAT, "[REDACTED-GH-TOKEN]")
+    .replace(BEARER, "Bearer [REDACTED]")
+    .replace(OPENAI_KEY, "[REDACTED-KEY]")
+    .replace(NAME_VALUE_SECRET, (m, name, sep, q) => `${name}${sep}${q}[REDACTED]`);
+}
+
+/**
+ * Recursively scrub secret values, preserving identity/correlation fields (UUIDs) and paths.
+ * Secret-NAMED keys are masked wholesale; every string is scrubbed via redactStringSecretsOnly.
+ * Pure — returns a new value, never mutates.
+ */
+export function redactValueSecretsOnly(value) {
+  if (value == null) return value;
+  if (typeof value === "string") return redactStringSecretsOnly(value);
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.map((v) => redactValueSecretsOnly(v));
+  if (typeof value === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = isSecretKey(k) ? REDACTED : redactValueSecretsOnly(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
+ * Redact secrets from a telemetry event for the LIVE local store (identity-preserving):
+ * masks secret values but keeps correlationId/telemetryId so the store stays queryable.
+ */
+export function redactEventSecretsOnly(event) {
+  return redactValueSecretsOnly(event);
+}
