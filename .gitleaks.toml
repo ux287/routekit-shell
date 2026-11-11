@@ -1,0 +1,46 @@
+# .gitleaks.toml — gitleaks secret scanning configuration
+# Approach: run default ruleset, then suppress known false positives via allowlist.
+# One-time history scan: gitleaks detect --source . --log-opts="--all" --config .gitleaks.toml
+
+title = "routekit-shell-core gitleaks config"
+
+[extend]
+# Use gitleaks default ruleset as the base
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# Global allowlist: paths and patterns that are never real secrets
+# ---------------------------------------------------------------------------
+
+[allowlist]
+description = "Global false-positive suppressions for routekit-shell-core"
+
+# Paths that should never be scanned (node_modules, test fixtures, templates)
+paths = [
+  '''node_modules/.*''',
+  '''tests/.*''',
+  '''test/.*''',
+  '''__tests__/.*''',
+  '''.*fixtures.*''',
+  '''templates/.*''',
+  '''\.env\.example$''',
+  '''\.env\.sample$''',
+  '''\.env\.template$''',
+  '''package-lock\.json$''',
+  '''pnpm-lock\.yaml$''',
+  '''yarn\.lock$''',
+]
+
+# Regex patterns for values that are obviously not real secrets
+regexes = [
+  # Common placeholder values
+  '''your[_-]?(api[_-]?)?key[_-]?here''',
+  '''sk-[xX]{10,}''',
+  '''REPLACE[_-]ME''',
+  '''<YOUR[_-].*>''',
+  # Test / example tokens with obviously synthetic patterns
+  '''test[_-]?token[_-]?\d+''',
+  '''example[_-]?secret''',
+  # GitHub Actions expression syntax — not secrets
+  '''\$\{\{.*secrets\..*\}\}''',
+]
