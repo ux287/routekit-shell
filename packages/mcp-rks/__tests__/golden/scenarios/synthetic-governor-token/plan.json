@@ -1,0 +1,40 @@
+{
+  "projectId": "routekit-shell",
+  "task": "Synthetic golden scenario: Update governor token flow tools",
+  "planSummary": "Add rks_validate_story to story flow tools and add logging to open flow tools",
+  "status": "executable",
+  "steps": [
+    {
+      "title": "Add rks_validate_story to STORY_FLOW_TOOLS",
+      "description": "Include rks_validate_story in the story flow allowlist",
+      "order": 1,
+      "id": "step-001",
+      "action": "search_replace",
+      "path": "packages/mcp-rks/src/shared/governor-token.mjs",
+      "content": null,
+      "edits": [
+        {
+          "search": "const STORY_FLOW_TOOLS = new Set([\n  'rks_refine',\n  'rks_refine_apply',\n  'rks_agent_research',\n  'rks_plan',\n  'rks_plan_review',\n  'rks_plan_ready',\n  'rks_exec',\n  'rks_exec_abort',\n  'rks_ship',\n  'rks_preflight',\n  'rks_analyze',",
+          "replace": "const STORY_FLOW_TOOLS = new Set([\n  'rks_refine',\n  'rks_refine_apply',\n  'rks_agent_research',\n  'rks_plan',\n  'rks_plan_review',\n  'rks_plan_ready',\n  'rks_validate_story',\n  'rks_exec',\n  'rks_exec_abort',\n  'rks_ship',\n  'rks_preflight',\n  'rks_analyze',"
+        }
+      ],
+      "command": null
+    },
+    {
+      "title": "Update OPEN_FLOW_TOOLS allowlist",
+      "description": "Add rks_kg_query to open flow tools for research support",
+      "order": 2,
+      "id": "step-002",
+      "action": "search_replace",
+      "path": "packages/mcp-rks/src/shared/governor-token.mjs",
+      "content": null,
+      "edits": [
+        {
+          "search": "const OPEN_FLOW_TOOLS = new Set([\n  'rks_agent_research',\n  'dendron_create_note',\n  'dendron_edit_note',\n  'dendron_read_note',\n  'dendron_update_field',\n  'rks_preflight',\n]);",
+          "replace": "const OPEN_FLOW_TOOLS = new Set([\n  'rks_agent_research',\n  'rks_kg_query',\n  'dendron_create_note',\n  'dendron_edit_note',\n  'dendron_read_note',\n  'dendron_update_field',\n  'rks_preflight',\n]);"
+        }
+      ],
+      "command": null
+    }
+  ]
+}
