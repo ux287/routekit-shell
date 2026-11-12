@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.DS_Store
+.vscode/
+.routekit/
+.dendron.cache/
+# RouteKit notes vault
+notes/
+
