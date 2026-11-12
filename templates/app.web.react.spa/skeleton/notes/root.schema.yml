@@ -1,0 +1,14 @@
+version: 1
+schemas:
+  - id: root
+    title: Stack Notes
+    parent: null
+    children:
+      - stack.blog
+      - stack.portfolio
+  - id: stack.blog
+    title: Stack Blog Entry
+    template: stack.blog.example
+  - id: stack.portfolio
+    title: Stack Portfolio Entry
+    template: stack.portfolio.example
