@@ -1,0 +1,6 @@
+version: 5
+workspace:
+  vaults:
+    - fsPath: notes
+      name: notes
+      visibility: public
