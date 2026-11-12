@@ -1,0 +1,29 @@
+{
+  "_comment": "B5 pre-refactor effective config for vitest.config.mjs (fallback tier). The post-refactor merged config MUST match this fixture exactly, byte-for-byte. If it doesn't, B5 silently changed test execution behavior — investigate before merging.",
+  "include": [
+    "tests/**/*.test.*",
+    "tests/**/*.spec.*"
+  ],
+  "exclude": [
+    "tests/.tmp/**"
+  ],
+  "bail": null,
+  "isolate": null,
+  "pool": "forks",
+  "poolOptions": {
+    "forks": {
+      "minForks": 1,
+      "maxForks": 4
+    }
+  },
+  "setupFiles": [
+    "tests/setup.mjs"
+  ],
+  "clearMocks": true,
+  "env": {
+    "NODE_NO_WARNINGS": "1",
+    "ROUTEKIT_SKIP_GLOBAL_CONFIG": "true"
+  },
+  "hookTimeout": null,
+  "testTimeout": null
+}

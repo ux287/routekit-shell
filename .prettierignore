@@ -1,0 +1,9 @@
+# Pseudo-YAML tool schemas — not valid YAML, Prettier should ignore them
+.routekit/tools.schema.yaml
+templates/app-web/.routekit/tools.schema.yaml
+
+# Workspace and generated-ish files
+.claude/
+.vscode/
+templates/app-web/.vscode/
+templates/app-web/CLAUDE.md

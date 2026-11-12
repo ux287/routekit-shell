@@ -1,0 +1,65 @@
+# Git Workflow Policy Configuration
+# Controls what git operations Claude can perform
+#
+# Branch Topology Integration
+# ---------------------------
+# This policy respects project-level branch topology configuration.
+# Projects can define custom branch roles in project.json registry:
+#   {
+#     "branches": {
+#       "working": "dev",
+#       "integration": "staging",
+#       "production": "main"
+#     },
+#     "workflow": {
+#       "autoMergeIntegration": false,  // PR but don't auto-merge
+#       "workingBranchLocal": true      // working branch not on origin
+#     }
+#   }
+#
+# MCP tools (rks_cycle_complete, rks_story_ship, rks_promote) read
+# this config and adjust behavior accordingly.
+
+# Branches that require extra protection (PRs required)
+# Typically: integration and production branches
+protected_branches:
+  - main
+  - staging
+  - "release/*"
+
+# Branches where direct commits are blocked (but push allowed)
+# Typically: integration and production branches
+commit_protected_branches:
+  - main
+  - staging
+  - "release/*"
+
+# Require PRs for pushing to protected branches
+require_pr_for_protected: true
+
+# Explicitly blocked operations
+blocked_operations:
+  - pattern: "git reset --hard"
+    branches: [main, staging]
+    message: "Hard reset on protected branch blocked"
+
+  - pattern: "git push.*--delete"
+    branches: [main, staging]
+    message: "Branch deletion on protected branch blocked"
+
+  - pattern: "git rebase.*-i"
+    message: "Interactive rebase not supported in non-interactive mode"
+
+# Test requirements
+require_tests:
+  # Run tests before every commit (default: true)
+  before_commit: true
+
+  # Run tests before push (default: false, can be slow)
+  before_push: false
+
+  # Command to run tests
+  test_command: "npm test"
+
+  # Timeout in milliseconds (default: 120000 = 2 min)
+  timeout: 120000

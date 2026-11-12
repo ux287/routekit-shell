@@ -1,0 +1,74 @@
+# Architecture Drift Detection Policy for RouteKit Shell
+# Detects when code changes might conflict with design decisions
+
+# Enable/disable architecture checking
+enabled: true
+
+# Note patterns for architecture documentation
+# These notes will be queried via RAG when structural changes are detected
+architecture_note_patterns:
+  - "design.architecture.*"
+  - "design.patterns.*"
+  - "design.decisions.*"
+  - "docs.architecture.*"
+
+# Types of changes that trigger architecture review
+check_on:
+  # New file creation - check if it follows established patterns
+  new_file_creation: true
+
+  # Directory structure changes
+  directory_structure_change: true
+
+  # Import pattern changes (e.g., introducing new dependency patterns)
+  import_pattern_change: true
+
+  # New exports from core modules
+  public_api_change: true
+
+# Structural patterns to monitor
+# When these patterns are modified, query for related architecture docs
+monitored_patterns:
+  # Core package structure
+  - pattern: "packages/cli/src/**/*.{js,ts}"
+    architecture_query: "CLI architecture patterns commands structure"
+
+  - pattern: "packages/mcp-rks/src/**/*.{js,ts,mjs}"
+    architecture_query: "MCP server architecture tools resources"
+
+  - pattern: "packages/design/**/*.{ts,tsx}"
+    architecture_query: "design system architecture components tokens"
+
+  # Configuration files
+  - pattern: "*.config.{js,ts,json}"
+    architecture_query: "configuration patterns project setup"
+
+  # Hook system
+  - pattern: ".routekit/hooks/**/*.mjs"
+    architecture_query: "hook system architecture PreToolUse PostToolUse"
+
+# Directories that represent core structural decisions
+structural_directories:
+  - packages/
+  - templates/
+  - scripts/
+  - .routekit/
+
+# Action on potential drift detection
+on_drift_detected: warn  # Options: warn, block
+
+# Number of RAG results to consider when checking architecture
+rag_query_limit: 3
+
+# Minimum relevance score for RAG results to trigger warning
+min_relevance_score: 0.6
+
+# Skip architecture checks for these patterns
+skip_patterns:
+  - "node_modules/"
+  - "dist/"
+  - "build/"
+  - ".git/"
+  - "*.test.*"
+  - "*.spec.*"
+  - "*.d.ts"
