@@ -1,0 +1,1485 @@
+/**
+ * Story Ship - Atomic and idempotent story completion
+ *
+ * Flow (always):
+ *   feature branch → PR to working branch → merge → mark_implemented → cycle_complete
+ *
+ * With autoMergeIntegration: true (default):
+ *   Also promotes working → integration branch
+ *
+ * Handles edge cases gracefully:
+ * - PR already exists: skip creation
+ * - PR already merged: skip merge
+ * - Story already implemented: skip marking
+ * - Already on working branch: skip cleanup
+ */
+import { spawnSync } from 'child_process';
+import path from 'path';
+import fs from 'fs';
+// runGitPR and runStagingMerge are NOT imported: this path opens and merges no PR for any
+// topology (AC 5). Both remain exported and are still used by rks_ship / genuinely
+// PR-creating callers — only this file's dead references go (AC 15).
+import { runCycleComplete, runPromote } from './git-tools.mjs';
+import { loadContext, getBranchConfig, getWorkflowConfig } from './project.mjs';
+import { resolveNotesDir, updateField, parseFrontmatter } from '../dendron.mjs';
+import { advancePhase, reconcileExecutingBeforeShip, findStoryCommitEvidence, isRefAncestorOfHead, readFileAtRef } from '../workflow/auto-phase.mjs';
+import { ensureTelemetryStorage } from '@routekit/telemetry';
+import { assertNotOnProtectedBranch } from './branch-protection.mjs';
+import { pollCiStatus } from './ci-polling.mjs';
+import { getUncommittedFiles } from '../utils/git.mjs';
+import { localMerge } from './git/local-merge.mjs';
+import { isThreeBranchTopology, deliverFeatureBranch, pushWorkingBranch } from './git/branch-delivery.mjs';
+// STATIC, and its own statement. review.mjs is reached through a dynamic import below
+// (it pulls @routekit/rag), and two integration tests mock that module with exactly three
+// names — a fourth reached through it would resolve to undefined. The shared leaf has no
+// imports of its own, so importing it statically costs nothing.
+import { normalizeAcCoverage } from '../shared/ac-coverage.mjs';
+import { runFullSuiteGate, fullSuiteGateApplies, fullSuiteGateStep } from '../exec/full-suite-gate.mjs';
+import { landingGateEnabled, prepareLandingCandidate, readHeadSha, verifyTargetUnmoved } from '../exec/landing-candidate.mjs';
+import { loadStoryTestFiles } from '../shared/story-test-files.mjs';
+import { computeRequirementsDigest, isRequirementCoverageComplete, isProcessRequirement } from '../exec/test-results.mjs';
+import { resolveUnverifiedCoveragePolicy } from '../exec/requirement-coverage-policy.mjs';
+import { provenanceTrailerLine } from '../shared/commit-provenance.mjs';
+import { spliceNoteFrontmatter } from '../shared/frontmatter.mjs';
+
+/**
+ * The closed `cause` vocabulary, mirrored from review.mjs's RECOGNIZED_CAUSES
+ * for the on-rail path. An allowlist, never blanket passthrough: an
+ * unrecognized cause still normalizes to call_failed, so a caller-supplied
+ * string cannot reach the ship step or telemetry.
+ */
+const RECOGNIZED_REVIEW_CAUSES = ['not_configured', 'call_failed', 'malformed_response'];
+
+function normalizeReviewCause(cause) {
+  return RECOGNIZED_REVIEW_CAUSES.includes(cause) ? cause : 'call_failed';
+}
+
+/**
+ * Build the `steps` entry recording the outcome of the review step.
+ *
+ * A SINGLE call site replaces the two inline pushes this step used to carry —
+ * the success-branch literal and the `!reviewResult.ok` else-branch literal —
+ * so no review outcome can be recorded by an inline object again. The old
+ * success push read `ok: true, verdict: reviewResult.verdict` unconditionally,
+ * which is how a reviewer that never ran was recorded as a pass.
+ *
+ * Defined ABOVE runStoryShipTool on purpose: tests/unit/ship-failure-branch-state.test.mjs
+ * scans the source region from `runStoryShipTool` to buildShipFailure's JSDoc and
+ * requires that every `ok: false` line in it belong to the ci_check step and that
+ * no `return {` displaces the success return. This function has both, so it must
+ * live outside that region.
+ *
+ * @param {object} reviewResult result from runReview
+ */
+/**
+ * Apply the ONE acCoverage cleaning rule to a redacted review result.
+ *
+ * redactReview scrubs secret-shaped literals out of the three lists, but it deliberately
+ * does not bound, allowlist or coerce — that is normalizeAcCoverage's job, and until now
+ * only the off-rail step and the review.complete emit applied it. The rks_story_ship
+ * response carries the whole review object, so three model-authored shapes reached the
+ * caller unscrubbed: a list given as a bare string (which the entry-wise scrub skips), an
+ * extra key the model invented, and an entry String cannot coerce.
+ *
+ * PURE. Never mutates its input, and an absent acCoverage key stays absent — absence is
+ * what the phase-advance gate reads as "no coverage evidence", so it must not become null.
+ *
+ * Declared above runStoryShipTool deliberately: ship-failure-branch-state.test.mjs scans
+ * that function's body region and requires every `ok: false` line there to belong to the
+ * ci_check step.
+ */
+export function normalizeReviewAcCoverage(reviewResult) {
+  if (!reviewResult || typeof reviewResult !== 'object') return reviewResult;
+  if (!('acCoverage' in reviewResult)) return reviewResult;
+  const raw = reviewResult.acCoverage;
+  if (raw === null || typeof raw !== 'object') return { ...reviewResult, acCoverage: raw };
+  return { ...reviewResult, acCoverage: normalizeAcCoverage(raw) };
+}
+
+export function buildReviewStepEntry(reviewResult = {}) {
+  const r = reviewResult || {};
+  // A reviewer that errored, was never configured, or reported itself
+  // unavailable all mean the same thing here: the gate did not evaluate.
+  const reviewerDidNotRun =
+    r.reviewerUnavailable === true || r.llmFailed === true || r.ok === false;
+
+  if (reviewerDidNotRun) {
+    return {
+      step: 'review',
+      ok: false,
+      // Never report a pass for a review that did not happen.
+      verdict: r.verdict && r.verdict !== 'pass' ? r.verdict : 'unavailable',
+      reviewerUnavailable: true,
+      cause: normalizeReviewCause(r.cause),
+      error: r.error || 'review_failed',
+      reason: r.error || 'review_failed',
+      findingCount: r.findings?.length || 0,
+      ...(r.findings?.length ? { findings: r.findings } : {}),
+      // What the reviewer actually SAID, when it answered but unparseably.
+      // CONDITIONAL, and already scrubbed at the producer (review.mjs).
+      ...(r.rawResponse !== undefined ? { rawResponse: r.rawResponse } : {}),
+    };
+  }
+
+  return {
+    step: 'review',
+    ok: true,
+    verdict: r.verdict,
+    summary: r.summary,
+    // What the reviewer was NOT shown. CONDITIONAL: an untruncated review gains no key.
+    ...(r.diffTruncation && r.diffTruncation.truncated === true ? { diffTruncation: r.diffTruncation } : {}),
+    findingCount: r.findings?.length || 0,
+    // Carried so a block verdict can be acted on. CALLER CONTRACT: the result
+    // passed here must already be redacted — a finding's `line` holds up to 100
+    // chars of the matched diff line, which for a security pattern is the
+    // credential assignment itself. runStoryShipTool redacts at the runReview
+    // boundary, where review.mjs is already loaded.
+    ...(r.findings?.length ? { findings: r.findings } : {}),
+  };
+}
+
+/**
+ * The single source of truth for whether a ship succeeded.
+ *
+ * A step entry is one of three shapes: `ok: true` (succeeded), `ok: false`
+ * (failed), or NO `ok` field at all (a legitimate skip — no GitHub token, story
+ * already implemented, nothing to promote). Only an explicit `false` is a
+ * failure: `undefined === false` is itself false, so skips cannot flip this.
+ *
+ * Deliberately NOT `steps.every(s => s.ok === true)`. That predicate looks
+ * equivalent and is not — it treats every legitimate skip as a failure and would
+ * make ship report failure on essentially every real run.
+ *
+ * This drives BOTH the returned `ok` and the success/failure telemetry, so the
+ * two channels cannot disagree. Reporting `ok: false` while emitting a success
+ * event would be the same false-success defect one layer down.
+ */
+export function reduceShipOk(steps = []) {
+  return !steps.some(s => s.ok === false);
+}
+
+/**
+ * Build a failed `mark_implemented` step entry.
+ *
+ * Defined out here on purpose, mirroring the review step-entry helper: a pinning
+ * test asserts that every `ok: false` literal inside the tool body also mentions
+ * both 'ci_check' and 'steps.push'. Writing these entries inline would red it.
+ * The entry keeps `skipped: true` for backward compatibility with readers that
+ * count skips, and adds the `ok` field the reduction needs.
+ */
+export function buildMarkImplementedFailure(reason) {
+  return { step: 'mark_implemented', ok: false, skipped: true, reason };
+}
+
+/**
+ * Build a failed `cycle_complete` step entry.
+ *
+ * backlog.fix.cycle-complete-ungated-hard-reset: this step used to be pushed as
+ * `{ step: 'cycle_complete', skipped: true, reason }` with NO `ok` field. `reduceShipOk` is
+ * `!steps.some(s => s.ok === false)`, so an entry carrying no `ok` can never fail the reduction —
+ * a refused cycle-complete was laundered into a step that read as success. Now that
+ * `runCycleComplete` refuses rather than destroying unpushed commits, that laundering would hide
+ * exactly the outcome the gate exists to report.
+ *
+ * `skipped: true` is retained for readers that count skips, matching
+ * `buildMarkImplementedFailure`. Defined out here for the same reason it is: a pinning test
+ * asserts every `ok: false` literal inside the tool body also mentions 'ci_check' and
+ * 'steps.push', so writing this inline would red it.
+ */
+export function buildCycleCompleteFailure(reason, hint) {
+  return { step: 'cycle_complete', ok: false, skipped: true, reason, ...(hint ? { hint } : {}) };
+}
+
+/**
+ * backlog.fix.exec-end-phase-write-left-uncommitted
+ *
+ * Report whether THIS story's own note is tracked and carries uncommitted changes
+ * (staged or unstaged). Read-only: a single `git status --porcelain` on that one path.
+ *
+ * An UNTRACKED own note (`??`) is not reported — it cannot make localMerge's checkout
+ * abort, and the existing preflight deliberately lets it through. Defined above
+ * runStoryShipTool so it sits outside the region tests/unit/ship-failure-branch-state.test.mjs scans.
+ *
+ * @returns {null | { path: string, status: string }}
+ */
+export function findOwnStoryNoteUncommitted(projectRoot, problemId) {
+  if (!problemId) return null;
+  const notePath = path.relative(projectRoot, path.join(resolveNotesDir(projectRoot), `${problemId}.md`));
+  if (!notePath || notePath.startsWith('..') || path.isAbsolute(notePath)) return null;
+  const res = spawnSync('git', ['status', '--porcelain', '--', notePath], { cwd: projectRoot, encoding: 'utf8', timeout: 30_000 });
+  if (res.status !== 0) return null;
+  const line = (res.stdout || '').split('\n').find((l) => l.trim().length > 0);
+  if (!line || line.startsWith('??') || line.startsWith('!!')) return null;
+  return { path: notePath, status: line.slice(0, 2) };
+}
+
+/**
+ * backlog.fix.story-ship-unreachable-from-fresh-session
+ *
+ * Decide what rks_story_ship does when the worktree is ALREADY on the working branch, from
+ * observations only. `ref` is the DELIVERED ref (origin/<working> when the working branch has a
+ * remote, otherwise <working>):
+ *   - archived note, or phase integrated / released, in the worktree AND on `ref`
+ *                                                             -> already_integrated
+ *   - the same in the worktree but NOT on `ref`               -> refuse (integration_not_on_delivered_ref)
+ *   - phase executed AND findStoryCommitEvidence finds a commit reachable from `ref`
+ *     AND `ref` is an ancestor of HEAD                        -> advance, carrying that commit
+ *   - the same but `ref` is not an ancestor of HEAD           -> refuse (working_branch_behind_delivered_ref)
+ *   - anything else                                           -> refuse, naming the reason
+ * The branch match alone never advances a phase and never reports success. Success is sourced
+ * from the delivered ref, because the phase write is committed on the local HEAD and pushed from
+ * there: a local view that origin does not share is not an integration. A git failure is a
+ * refusal (evidence_unreadable), never absence. Reads the note and git only; writes nothing.
+ *
+ * Declared above runStoryShipTool on purpose: ship-failure-branch-state.test.mjs scans that
+ * function's body, and story-ship-preflight.test.mjs / exec-end-phase-note-committed.test.mjs
+ * locate the working-branch block by the first occurrence of its reason and guard texts, so
+ * neither may appear in this helper.
+ *
+ * @returns {{ action: 'advance', phase: string, evidence: object }
+ *   | { action: 'already_integrated', observed: string }
+ *   | { action: 'refuse', reason: string, error: string, hint?: string }}
+ */
+export function classifyShipOnWorkingBranch({ projectRoot, problemId, working, ref }) {
+  if (!problemId) {
+    return { action: 'refuse', reason: 'no_story_id', error: `No problemId: nothing on ${ref} can be attributed to a story, so no phase is advanced` };
+  }
+  const notesDir = resolveNotesDir(projectRoot);
+  const storyPath = path.join(notesDir, `${problemId}.md`);
+  const archivedPath = path.join(notesDir, problemId.replace(/^backlog\./, 'backlog.z_implemented.') + '.md');
+  let phase = null;
+  let localObserved = null;
+  if (!fs.existsSync(storyPath)) {
+    if (!fs.existsSync(archivedPath)) {
+      return { action: 'refuse', reason: 'story_note_not_found', error: `Story note not found at ${storyPath} or ${archivedPath}` };
+    }
+    localObserved = 'archived';
+  } else {
+    try {
+      phase = parseFrontmatter(fs.readFileSync(storyPath, 'utf8'))?.data?.phase || 'draft';
+    } catch (err) {
+      return { action: 'refuse', reason: 'story_note_unreadable', error: `Could not read the phase of ${problemId}: ${err.message}` };
+    }
+    if (phase === 'integrated' || phase === 'released') localObserved = phase;
+  }
+  if (localObserved) {
+    // The worktree says the story is integrated. Report that as success only when the delivered
+    // ref says so too: a bookkeeping commit that never left this clone (a rejected push, then a
+    // retry from the working branch) is not an integration, and origin still reads executed.
+    const relOf = (p) => path.relative(projectRoot, p).split(path.sep).join('/');
+    let observedOnRef = null;
+    try {
+      if (readFileAtRef(projectRoot, ref, relOf(archivedPath)) !== null) {
+        observedOnRef = 'archived';
+      } else {
+        const atRef = readFileAtRef(projectRoot, ref, relOf(storyPath));
+        const refPhase = atRef === null ? null : parseFrontmatter(atRef)?.data?.phase;
+        if (refPhase === 'integrated' || refPhase === 'released') observedOnRef = refPhase;
+      }
+    } catch (err) {
+      return { action: 'refuse', reason: 'evidence_unreadable', error: `Could not read ${problemId} on ${ref}: ${err.message}` };
+    }
+    if (observedOnRef) return { action: 'already_integrated', observed: observedOnRef };
+    return {
+      action: 'refuse',
+      reason: 'integration_not_on_delivered_ref',
+      error: `${problemId} reads ${localObserved} in this worktree but not on ${ref}: the bookkeeping commit was not delivered, so the story is not reported as integrated`,
+      hint: `Deliver the bookkeeping commit to ${ref} (commit it on ${working}, and push ${working} when it has a remote), then re-run rks_story_ship`,
+    };
+  }
+  if (phase !== 'executed') {
+    return { action: 'refuse', reason: 'phase_not_executed', error: `Story ${problemId} is at phase ${phase}; only an executed story is advanced from the working branch` };
+  }
+  let evidence;
+  try {
+    evidence = findStoryCommitEvidence(projectRoot, problemId, ref);
+  } catch (err) {
+    return { action: 'refuse', reason: 'evidence_unreadable', error: `Could not read git history on ${ref}: ${err.message}` };
+  }
+  if (!evidence) {
+    return {
+      action: 'refuse',
+      reason: 'no_story_commit_on_working_branch',
+      error: `No commit carrying the trailer Story: ${problemId}, and none whose subject is exactly feat(exec): ${problemId}, is reachable from ${ref}. The phase is not advanced.`,
+    };
+  }
+  // The phase write is committed on the local HEAD and pushed from there. It can only be
+  // delivered when HEAD already contains `ref`; otherwise the push is rejected, cycle_complete
+  // refuses on the stranded commit, and origin keeps reading executed.
+  let delivered;
+  try {
+    delivered = isRefAncestorOfHead(projectRoot, ref);
+  } catch (err) {
+    return { action: 'refuse', reason: 'evidence_unreadable', error: `Could not compare ${ref} with HEAD: ${err.message}` };
+  }
+  if (!delivered) {
+    return {
+      action: 'refuse',
+      reason: 'working_branch_behind_delivered_ref',
+      error: `${ref} carries the story commit but is not an ancestor of HEAD: the local ${working} is behind or has diverged from ${ref}, so a phase write committed here could not be delivered. The phase is not advanced.`,
+      hint: `Fast-forward ${working} to ${ref}, then re-run rks_story_ship`,
+    };
+  }
+  return { action: 'advance', phase, evidence };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Coverage-record gate (backlog.fix.ship-archive-requires-exec-coverage-record).
+//
+// A story whose note carries a non-empty `testRequirements` list is shipped only when the
+// note also carries the `requirementCoverageRecord` written by rks_exec
+// (backlog.fix.exec-test-requirements-coverage-gate), that record is current against the
+// note's testRequirements, complete, and its commit is an ancestor of what is being shipped.
+//
+// Everything here is declared ABOVE runStoryShipTool on purpose:
+// tests/unit/ship-failure-branch-state.test.mjs scans that function's body and requires every
+// line carrying a false-outcome literal to belong to the ci_check step, so the step entry's
+// `ok` is derived here from the evaluation and never written as a literal in the tool body.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COVERAGE_GIT_TIMEOUT_MS = 15_000;
+
+/** The recovery route named by every refusal: a fresh plan + exec writes a current record. */
+export const COVERAGE_RECORD_RECOVERY =
+  'Return the worktree to the base branch, then re-run rks_plan and rks_exec on the story so exec writes a current requirementCoverageRecord, then retry rks_story_ship';
+
+const isNonEmptyString = (v) => typeof v === 'string' && v.length > 0;
+const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/** Does the gate apply to this frontmatter? Only for a non-empty testRequirements array. */
+export function coverageRecordGateApplies(frontmatter) {
+  return isPlainObject(frontmatter) && Array.isArray(frontmatter.testRequirements) && frontmatter.testRequirements.length > 0;
+}
+
+/**
+ * Read the story note's frontmatter for the gate. Returns:
+ *   { applies: false }                       no problemId, no note, or no / empty testRequirements
+ *   { applies: true, frontmatter }           the gate must evaluate this frontmatter
+ *   { applies: true, frontmatter: null, error }  the note exists but could not be parsed (fails closed)
+ */
+export function readCoverageGateFrontmatter(projectRoot, problemId) {
+  if (!problemId) return { applies: false };
+  const storyPath = path.join(resolveNotesDir(projectRoot), `${problemId}.md`);
+  if (!fs.existsSync(storyPath)) return { applies: false };
+  let frontmatter;
+  try {
+    frontmatter = parseFrontmatter(fs.readFileSync(storyPath, 'utf8'))?.data;
+  } catch (err) {
+    return { applies: true, frontmatter: null, error: err?.message || String(err) };
+  }
+  return coverageRecordGateApplies(frontmatter) ? { applies: true, frontmatter } : { applies: false };
+}
+
+/** The HEAD commit observed now (40-hex), or null when it cannot be observed. */
+export function observeHeadCommit(projectRoot) {
+  try {
+    const res = spawnSync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: projectRoot, encoding: 'utf8', timeout: COVERAGE_GIT_TIMEOUT_MS });
+    const sha = typeof res?.stdout === 'string' ? res.stdout.trim() : '';
+    return res?.status === 0 && /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+  } catch {
+    return null;
+  }
+}
+
+/** true only when `git merge-base --is-ancestor <ancestor> <descendant>` exits 0. */
+export function isCommitAncestor(projectRoot, ancestor, descendant) {
+  try {
+    const res = spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd: projectRoot, encoding: 'utf8', timeout: COVERAGE_GIT_TIMEOUT_MS });
+    return res?.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+function coverageRefusal(reason, error, extra = {}) {
+  return { applies: true, ok: false, reason, error, ...extra };
+}
+
+/**
+ * Evaluate the coverage record. Side-effect free: the only external call is `isAncestor`,
+ * and only after checks 1-4 pass. Refuses, in order:
+ *   1. missing      no record / not an object / unknown verification; or an unverified record
+ *                   the ship-time policy does not accept
+ *   2. stale        requirementsDigest !== sha256(JSON.stringify(testRequirements))
+ *   3. incomplete   a requirement index with no entry, or (observed) a test entry not passed
+ *   4. unverifiable targetCommit or record.commit is not a non-empty string
+ *   5. mismatched   record.commit is not an ancestor of targetCommit
+ *
+ * @param {{ frontmatter: object|null, targetCommit: string|null, policy: object|null,
+ *           isAncestor: (ancestor: string, descendant: string) => boolean }} args
+ */
+export function evaluateCoverageRecordGate({ frontmatter, targetCommit, policy, isAncestor } = {}) {
+  if (frontmatter === null) {
+    return coverageRefusal('coverage_record_missing', 'Missing coverage record: the story note frontmatter could not be read, so no requirementCoverageRecord can be checked');
+  }
+  if (!coverageRecordGateApplies(frontmatter)) return { applies: false, ok: true };
+  const testRequirements = frontmatter.testRequirements;
+  const record = frontmatter.requirementCoverageRecord;
+
+  // 1. missing
+  if (!isPlainObject(record)) {
+    return coverageRefusal('coverage_record_missing', 'Missing coverage record: the story has testRequirements but its note carries no requirementCoverageRecord object written by rks_exec');
+  }
+  const verification = record.verification;
+  if (verification !== 'observed' && verification !== 'unverified') {
+    return coverageRefusal('coverage_record_missing', `Missing coverage record: requirementCoverageRecord.verification is ${JSON.stringify(verification ?? null)}, not observed or unverified, so the record cannot be parsed`);
+  }
+  if (verification === 'unverified' && policy?.acceptUnverified !== true) {
+    const outcome = policy?.reason || 'not_configured';
+    return coverageRefusal(
+      'coverage_record_unverified_not_accepted',
+      `Unverified coverage record refused: the record has verification unverified, and the ship-time policy testRequirementCoverage.acceptUnverified does not accept it (policy outcome: ${outcome}). The record's own unverified.policySource is not trusted`,
+      { policyOutcome: outcome },
+    );
+  }
+
+  // 2. stale
+  const currentDigest = computeRequirementsDigest(testRequirements);
+  if (record.requirementsDigest !== currentDigest) {
+    return coverageRefusal('coverage_record_stale', 'Stale coverage record: its requirementsDigest does not match the current testRequirements (they changed after exec wrote the record)', {
+      recordDigest: isNonEmptyString(record.requirementsDigest) ? record.requirementsDigest : null,
+      currentDigest,
+    });
+  }
+
+  // 3. incomplete
+  const entries = Array.isArray(record.requirements) ? record.requirements.filter(isPlainObject) : [];
+  const noEntry = testRequirements.map((_, i) => i).filter((i) => !entries.some((e) => e.index === i));
+  const testEntries = entries.filter((e) => e.kind === 'test');
+  const { missingIndices: unusable } = isRequirementCoverageComplete(testRequirements, testEntries);
+  const missingIndices = [...new Set([...noEntry, ...unusable])].sort((a, b) => a - b);
+  if (missingIndices.length > 0) {
+    return coverageRefusal('coverage_record_incomplete', `Incomplete coverage record: no usable entry for requirement index ${missingIndices[0]}`, {
+      index: missingIndices[0],
+      missingIndices,
+    });
+  }
+  if (verification === 'observed') {
+    // A requirement is a test requirement when its entry says so OR its text is not a
+    // [process] requirement — a hand-edited kind cannot exempt a test requirement.
+    const notPassed = entries.find((e) => Number.isInteger(e.index) && e.index < testRequirements.length
+      && (e.kind === 'test' || !isProcessRequirement(testRequirements[e.index]))
+      && e.observedStatus !== 'passed');
+    if (notPassed) {
+      return coverageRefusal('coverage_record_incomplete', `Incomplete coverage record: requirement index ${notPassed.index} has observedStatus ${JSON.stringify(notPassed.observedStatus ?? null)}, not passed`, {
+        index: notPassed.index,
+        observedStatus: notPassed.observedStatus ?? null,
+      });
+    }
+  }
+
+  // 4. unverifiable delivery
+  if (!isNonEmptyString(targetCommit) || !isNonEmptyString(record.commit)) {
+    return coverageRefusal('coverage_record_delivery_unverifiable', !isNonEmptyString(targetCommit)
+      ? 'Unverifiable delivery: the commit being shipped could not be observed, so the coverage record commit cannot be matched against it'
+      : 'Unverifiable delivery: the coverage record carries no commit, so it cannot be matched against the commit being shipped');
+  }
+
+  // 5. mismatched
+  if (typeof isAncestor !== 'function' || isAncestor(record.commit, targetCommit) !== true) {
+    return coverageRefusal('coverage_record_commit_mismatch', `Coverage record commit mismatch: record commit ${record.commit} is not an ancestor of the shipped commit ${targetCommit}`, {
+      recordCommit: record.commit,
+      targetCommit,
+    });
+  }
+
+  if (verification === 'unverified') {
+    return {
+      applies: true,
+      ok: true,
+      verification: 'unverified',
+      coverageVerification: 'unverified',
+      reason: isPlainObject(record.unverified) ? record.unverified.reason ?? null : null,
+    };
+  }
+  return { applies: true, ok: true, verification: 'observed' };
+}
+
+/** The `coverage_record_gate` steps entry. `ok` is DERIVED from the evaluation. */
+export function coverageRecordGateStep(evaluation) {
+  const e = evaluation || {};
+  if (e.ok === true) {
+    return {
+      step: 'coverage_record_gate',
+      ok: true,
+      verification: e.verification,
+      ...(e.coverageVerification === 'unverified' ? { coverageVerification: 'unverified', reason: e.reason } : {}),
+    };
+  }
+  return {
+    step: 'coverage_record_gate',
+    ok: e.ok === true,
+    reason: e.reason,
+    error: e.error,
+    ...(e.index !== undefined ? { index: e.index } : {}),
+  };
+}
+
+/** Fields the mark_implemented step carries for an accepted unverified record. */
+export function coverageMarkFields(evaluation) {
+  return evaluation?.ok === true && evaluation.coverageVerification === 'unverified'
+    ? { coverageVerification: 'unverified', reason: evaluation.reason }
+    : {};
+}
+
+/**
+ * backlog.fix.offrail-ship-and-phase-repair-skip-archive
+ *
+ * The post-advance archive of a shipped story, shared by every path that takes a story to
+ * `phase: integrated` (rks_story_ship's mark_implemented, rks_guardrails_on auto-ship and
+ * rks_phase_repair). Writes `status: implemented`, `commitId` / `commitBranch` when a delivered
+ * SHA is known, rewrites `id` to the `backlog.z_implemented.*` id, and renames the file.
+ *
+ * Defined ABOVE runStoryShipTool so its body lies outside every tool-body slice the tests take
+ * (tests/unit/ship-failure-branch-state.test.mjs, tests/unit/rks-ship-writers.test.mjs). Makes NO
+ * git call: committing the rename is the caller's job. Never throws. `oldPath` and `newPath` are
+ * returned on every outcome so a caller can pass both to a commit even when the archive failed,
+ * and `archived` is read from the filesystem after the attempt, never assumed.
+ *
+ * @param {{ projectRoot: string, notesDir?: string, problemId: string, commitSha?: string, commitBranch?: string }} args
+ * @returns {{ archived: boolean, skipped?: boolean, reason?: string, error?: string, oldPath: string, newPath: string }}
+ */
+export function archiveShippedStory({ projectRoot, notesDir, problemId, commitSha, commitBranch } = {}) {
+  const dir = notesDir || resolveNotesDir(projectRoot);
+  const newProblemId = String(problemId || '').replace(/^backlog\./, 'backlog.z_implemented.');
+  const oldPath = path.join(dir, `${problemId}.md`);
+  const newPath = path.join(dir, `${newProblemId}.md`);
+  if (fs.existsSync(newPath)) {
+    return { archived: false, skipped: true, reason: 'already_implemented', oldPath, newPath };
+  }
+  if (!fs.existsSync(oldPath)) {
+    return { archived: false, error: `story note not found at ${oldPath}`, oldPath, newPath };
+  }
+  let error;
+  try {
+    // Idempotent when the caller already wrote status (rks_story_ship writes it itself, right
+    // after its phase advance validates); required for the off-rail and phase-repair callers.
+    updateField(dir, problemId, 'status', 'implemented');
+    if (commitSha) {
+      updateField(dir, problemId, 'commitId', commitSha);
+      updateField(dir, problemId, 'commitBranch', commitBranch);
+    }
+    // The id rewrite is a frontmatter splice, not updateField: updateField re-asserts the note's
+    // existing id after applying the field (`fm.id = id`), so an id written through it was
+    // discarded and archived notes kept their live backlog.* id.
+    const spliced = spliceNoteFrontmatter(fs.readFileSync(oldPath, 'utf8'), { id: newProblemId });
+    if (spliced === null) throw new Error(`story note ${oldPath} has no frontmatter block; id not rewritten`);
+    fs.writeFileSync(oldPath, spliced);
+    fs.renameSync(oldPath, newPath);
+  } catch (err) {
+    error = err?.message || String(err);
+  }
+  const archived = !fs.existsSync(oldPath) && fs.existsSync(newPath);
+  if (archived) return { archived, oldPath, newPath };
+  return { archived, error: error || `archive did not complete: ${oldPath} was not renamed to ${newPath}`, oldPath, newPath };
+}
+
+export async function runStoryShipTool({ projectId, problemId, discardLocalCommits = false }) {
+  const steps = [];
+  const shipStartMs = Date.now();
+  let stepsCompleted = 0;
+  let stepsSkipped = 0;
+  const context = await loadContext(projectId);
+  const projectRoot = context.record.root;
+
+  // Load branch and workflow config
+  const branchConfig = getBranchConfig(context.record, context.projectJson);
+  const workflowConfig = getWorkflowConfig(context.record, context.projectJson);
+  const { working, integration } = branchConfig;
+  const { autoMergeIntegration } = workflowConfig;
+  
+  // Detect if working branch is local-only: 3-branch topology OR runtime remote check
+  let workingBranchIsLocal = isThreeBranchTopology(branchConfig);
+  if (!workingBranchIsLocal) {
+    // Safety net: if the working branch doesn't exist on the remote, treat as local-only
+    const remoteCheck = spawnSync('git', ['ls-remote', '--heads', 'origin', working], { cwd: projectRoot, encoding: 'utf8' });
+    if (remoteCheck.status !== 0 || !remoteCheck.stdout.trim()) {
+      workingBranchIsLocal = true;
+    }
+  }
+
+  // Get current branch for telemetry
+  const currentBranch = spawnSync('git', ['branch', '--show-current'], { cwd: projectRoot, encoding: 'utf8' }).stdout.trim();
+
+  // CRITICAL: Refuse to run if somehow on a protected branch
+  try {
+    assertNotOnProtectedBranch(projectRoot, currentBranch, 'run story_ship from');
+  } catch (err) {
+    return buildShipFailure({
+      worktreeBranch: currentBranch,
+      baseBranch: working,
+      error: err.message,
+      hint: `story_ship should be run from a feature branch (rks/*), not from a protected branch. If the story's code is already on the working branch, check out ${working} and re-run rks_story_ship there`
+    });
+  }
+
+  // Emit start telemetry
+  const collector = ensureTelemetryStorage(projectRoot);
+  collector.emit('story_ship.start', projectId, { storyId: problemId, branch: currentBranch, autoMergeIntegration, workingBranch: working });
+
+  // PREFLIGHT: dirty-tree check BEFORE any git checkout/merge/push.
+  // Uses getUncommittedFiles from utils/git.mjs (same helper exec.mjs uses).
+  // Excludes notes/ files for consistency with exec.mjs — notes are
+  // governor-managed project metadata and travel via a separate commit path.
+  const preflightDirty = getUncommittedFiles(projectRoot, { filterRks: true })
+    .filter(f => !f.startsWith('notes/'));
+  if (preflightDirty.length > 0) {
+    collector.emit('story_ship.failed', projectId, {
+      storyId: problemId,
+      failedStep: 'preflight_dirty_tree',
+      dirtyFiles: preflightDirty.slice(0, 20),
+      dirtyCount: preflightDirty.length,
+      worktreeBranch: currentBranch,
+    });
+    return buildShipFailure({
+      worktreeBranch: currentBranch,
+      baseBranch: working,
+      error: `Dirty working tree — cannot ship`,
+      failedStep: 'preflight_dirty_tree',
+      dirtyFiles: preflightDirty,
+      hint: 'commit or stash your changes before running rks_story_ship; notes/ files are auto-excluded (they are governor-managed)',
+      steps: [],
+    });
+  }
+
+  // backlog.fix.story-ship-unreachable-from-fresh-session: already on the working branch.
+  // This used to return success with no phase write and no observation behind it, for EVERY
+  // story, so an executed story whose code was already delivered could never reach integrated.
+  // classifyShipOnWorkingBranch now decides from the note's phase and a story commit reachable
+  // from the DELIVERED ref (origin/<working> when the working branch has a remote). Only an
+  // advance continues, and only when HEAD already contains that ref. Review and delivery are
+  // then skipped, the opt-in full-suite gate still runs on HEAD, and Step 3 does the phase write.
+  let deliveredEvidence = null;
+  if (currentBranch === working) {
+    const onWorking = classifyShipOnWorkingBranch({
+      projectRoot,
+      problemId,
+      working,
+      ref: workingBranchIsLocal ? working : `origin/${working}`,
+    });
+    if (onWorking.action === 'already_integrated') {
+      collector.emit('story_ship.step.skipped', projectId, { step: 'all', reason: 'already_on_working_branch', observed: onWorking.observed });
+      stepsSkipped = 3;
+      return {
+        ok: true,
+        summary: `Already on ${working} and the story is already ${onWorking.observed} - nothing to ship`,
+        steps: [{ step: 'check', skipped: true, reason: 'already_on_working_branch', observed: onWorking.observed }],
+        stepsCompleted: 0,
+        stepsSkipped: 3,
+        idempotent: true,
+        workingBranch: working
+      };
+    }
+    if (onWorking.action !== 'advance') {
+      collector.emit('story_ship.failed', projectId, {
+        storyId: problemId,
+        failedStep: 'on_working_branch',
+        reason: onWorking.reason,
+        worktreeBranch: currentBranch,
+      });
+      return buildShipFailure({
+        worktreeBranch: currentBranch,
+        baseBranch: working,
+        error: onWorking.error,
+        failedStep: 'on_working_branch',
+        reason: onWorking.reason,
+        steps: [{ step: 'check', skipped: true, reason: 'already_on_working_branch' }],
+        hint: onWorking.hint || `From ${working}, rks_story_ship advances only an executed story whose Story: trailer commit (or exact feat(exec) subject commit) is reachable from the delivered working ref; fetch or deliver the commit, or ship from the feature branch`,
+      });
+    }
+    deliveredEvidence = onWorking.evidence;
+    steps.push({ step: 'check', ok: true, reason: 'already_on_working_branch', evidence: onWorking.evidence });
+    collector.emit('story_ship.step.completed', projectId, { step: 'check', result: { reason: 'already_on_working_branch', evidence: onWorking.evidence } });
+    stepsCompleted++;
+  }
+
+  // backlog.fix.exec-end-phase-write-left-uncommitted: the preflight above excludes notes/,
+  // so this story's OWN tracked note, left dirty (e.g. exec's exec_end phase write), would
+  // otherwise reach localMerge's `git checkout <working>` and abort there. Refuse instead,
+  // before review and delivery, with NO git write of our own: committing here would make
+  // ship a second, ungated writer of the exec_end note, and setting it aside would drop the
+  // phase. An untracked own note and other stories' notes keep the preflight's behaviour.
+  const ownNoteDirty = findOwnStoryNoteUncommitted(projectRoot, problemId);
+  if (ownNoteDirty) {
+    collector.emit('story_ship.failed', projectId, {
+      storyId: problemId,
+      failedStep: 'story_note_uncommitted',
+      notePath: ownNoteDirty.path,
+      worktreeBranch: currentBranch,
+    });
+    return buildShipFailure({
+      worktreeBranch: currentBranch,
+      baseBranch: working,
+      error: `Story note ${ownNoteDirty.path} has uncommitted changes — cannot ship`,
+      failedStep: 'story_note_uncommitted',
+      notePath: ownNoteDirty.path,
+      dirtyFiles: [ownNoteDirty.path],
+      hint: `commit ${ownNoteDirty.path} on ${currentBranch} (it carries the story's phase), then re-run rks_story_ship`,
+      steps: [],
+    });
+  }
+
+  // Step 1: Deliver the feature branch into the working branch.
+  //
+  // The `gh pr view` PRE-CHECK that used to open this step is GONE (AC 5 site 1). This
+  // path opens no PR for ANY topology now, so a pre-existing PR is not something it can
+  // meaningfully skip. `prUrl` remains DECLARED because it is read downstream in the
+  // result payload; it simply stays null.
+  let prUrl = null;
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Step 1.5 RUNS BEFORE DELIVERY (FINDING C, option (a)).
+  //
+  // It used to sit AFTER Step 1. That was safe only while Step 1 pushed the FEATURE
+  // branch and opened a PR — nothing had landed on the working branch, and Step 2's
+  // runStagingMerge is what landed it, so this gate genuinely blocked the merge.
+  //
+  // Once delivery became a local merge plus a push, leaving the gate below it did not
+  // merely make it late — it ELIMINATED it. local-merge.mjs:19 checks out the target
+  // and never checks back, so HEAD becomes `working`; runReview is called with
+  // targetBranch: working; review.mjs then runs `git diff working...HEAD`, whose
+  // merge-base IS HEAD, so the diff is empty; and review.mjs short-circuits an empty
+  // diff to { ok: true, verdict: 'pass' } WITHOUT EVER CALLING THE REVIEWER. Both
+  // halts below become unreachable and the step reports a pass sourced from our own
+  // git checkout rather than from any observation — R1 of
+  // notes/design.evidence-bound-reporting-invariant.md.
+  //
+  // Off-rail has always gated before delivery. This is that ordering, on both rails.
+  // Do NOT move this block below the delivery block.
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Step 1.5: Run code review (if enabled)
+  try {
+    const { runReview, loadReviewPolicy, redactReview } = await import('./review.mjs');
+    const policy = loadReviewPolicy(projectRoot);
+
+    if (policy.enabled && deliveredEvidence) {
+      // backlog.fix.story-ship-unreachable-from-fresh-session: HEAD is the working branch, so
+      // review.mjs would diff working...HEAD, find it empty and report a pass without calling the
+      // reviewer. Record a skip rather than a pass sourced from nothing.
+      steps.push({ step: 'review', skipped: true, reason: 'already_on_working_branch' });
+      stepsSkipped++;
+    } else if (policy.enabled) {
+      collector.emit('story_ship.step.started', projectId, { step: 'review' });
+      // Redact at the boundary. Everything downstream — the step entry AND the
+      // `review:` field on the ship-failure payloads below — reads this object,
+      // so redacting only one of them would leave a raw credential-bearing
+      // finding sitting beside a redacted one in the same response.
+      const reviewResult = normalizeReviewAcCoverage(redactReview(await runReview({
+        projectId,
+        problemId,
+        targetBranch: working,
+      })));
+
+      // Single step-entry call site covering BOTH the reviewResult.ok path and
+      // its else path — no review outcome is recorded by an inline literal.
+      const reviewStep = buildReviewStepEntry(reviewResult);
+      steps.push(reviewStep);
+      if (reviewStep.ok) {
+        collector.emit('story_ship.step.completed', projectId, { step: 'review', result: { verdict: reviewResult.verdict } });
+        stepsCompleted++;
+      } else {
+        collector.emit('story_ship.step.skipped', projectId, { step: 'review', reason: reviewStep.reason || 'review_failed' });
+        stepsSkipped++;
+      }
+
+      // Unavailability is evaluated OUTSIDE the reviewResult.ok / else split, so
+      // the halt is reachable from both and neither branch can carry a reviewer
+      // that never ran through to the merge. This is the fail-open being closed:
+      // a 404 on a retired model id previously surfaced as verdict 'pass'.
+      // Note this fires for a missing credential too — cause distinguishes the
+      // two in the payload, but NOT in the halt decision. Making the halt
+      // conditional on an env var would be a bypass by omission.
+      if (!reviewStep.ok && policy.failOpen !== true) {
+        collector.emit('story_ship.failed', projectId, {
+          storyId: problemId,
+          failedStep: 'review',
+          reason: 'reviewer_unavailable',
+          cause: reviewStep.cause,
+          worktreeBranch: currentBranch,
+        });
+        return buildShipFailure({
+          worktreeBranch: currentBranch,
+          baseBranch: working,
+          error: `Code review did not run: ${reviewStep.error}`,
+          failedStep: 'review',
+          reviewerUnavailable: true,
+          cause: reviewStep.cause,
+          review: reviewResult,
+          steps,
+          prUrl,
+          hint: 'The review gate cannot report a pass for a review that did not run. Either configure an ANTHROPIC_API_KEY credential for the reviewer, or record an explicit opt-out by setting enabled: false or failOpen: true in .rks/review-policy.yaml',
+        });
+      }
+
+      // Reaching here with a failed review means failOpen is explicitly set —
+      // a documented, deliberate opt-out. The ok-reduction must not override it,
+      // or enabling failOpen would start failing every ship that uses it.
+      //
+      // The entry is mutated HERE rather than at the push site: the push and the
+      // halt guard above are pinned verbatim by a test that must pass unmodified.
+      // Guarded on !reviewStep.ok because this code also runs when the review
+      // PASSED — an unconditional mutation would stamp a degraded marker onto a
+      // healthy review entry.
+      //
+      // Honesty rider: `ok` flips to true so the opt-out holds, but the verdict,
+      // cause and error are RETAINED. Erasing why the review failed would trade
+      // one false success for another.
+      // If verdict is 'block', stop the ship process. Unchanged, and still fires
+      // under failOpen:true — a degraded review whose pattern findings include a
+      // blocker still halts.
+      //
+      // THIS HALT MUST PRECEDE THE FAIL-OPEN MUTATION BELOW. `steps.push` above
+      // stored the entry BY REFERENCE, and this halt hands that same array to
+      // buildShipFailure — so a mutation running first would record `ok: true`
+      // for a review that blocked the merge. That is what this ordering fixes.
+      if (reviewResult.verdict === 'block') {
+        collector.emit('story_ship.failed', projectId, { storyId: problemId, failedStep: 'review', reason: 'review_blocked', worktreeBranch: currentBranch });
+        return buildShipFailure({
+          worktreeBranch: currentBranch,
+          baseBranch: working,
+          error: 'Code review blocked merge',
+          review: reviewResult,
+          steps,
+          prUrl,
+          hint: 'Address the review findings and retry rks_story_ship',
+        });
+      }
+
+      // Reached only for a NON-blocking failed review under an explicit
+      // fail-open policy. Both earlier halts (reviewer-unavailable, verdict
+      // block) have already returned, so nothing that should fail the ship can
+      // arrive here.
+      if (!reviewStep.ok) {
+        reviewStep.ok = true;
+        reviewStep.degraded = true;
+        reviewStep.failOpen = true;
+      }
+    } else {
+      steps.push({ step: 'review', skipped: true, reason: 'disabled_in_policy' });
+      stepsSkipped++;
+    }
+  } catch (reviewErr) {
+    // Review module not available or error - continue with warning
+    steps.push({ step: 'review', skipped: true, reason: reviewErr.message });
+    stepsSkipped++;
+  }
+
+  // Coverage-record gate (backlog.fix.ship-archive-requires-exec-coverage-record). Placed after
+  // review and immediately before the full-suite regression gate below, so the cheap record check
+  // refuses before the suite runs and before BOTH delivering arms: a refused story is not merged,
+  // pushed or archived. The target is the feature-branch HEAD observed now, or the evidence
+  // commit on the already-delivered path. A story with no or empty testRequirements gets no step.
+  const coverageNote = readCoverageGateFrontmatter(projectRoot, problemId);
+  if (coverageNote.applies) {
+    const coverageTarget = deliveredEvidence ? deliveredEvidence.commit : observeHeadCommit(projectRoot);
+    const coverageRecordGate = evaluateCoverageRecordGate({
+      frontmatter: coverageNote.frontmatter,
+      targetCommit: coverageTarget,
+      policy: resolveUnverifiedCoveragePolicy(projectRoot),
+      isAncestor: (ancestor, descendant) => isCommitAncestor(projectRoot, ancestor, descendant),
+    });
+    steps.push(coverageRecordGateStep(coverageRecordGate));
+    if (!coverageRecordGate.ok) {
+      collector.emit('story_ship.failed', projectId, { storyId: problemId, failedStep: 'coverage_record_gate', reason: coverageRecordGate.reason, worktreeBranch: currentBranch });
+      return buildShipFailure({
+        worktreeBranch: currentBranch,
+        baseBranch: working,
+        error: `Coverage-record gate refused ship (${coverageRecordGate.reason}): ${coverageRecordGate.error}`,
+        failedStep: 'coverage_record_gate',
+        coverageRecordGate,
+        steps,
+        hint: `Nothing was merged or pushed, and the story was not archived. A current requirementCoverageRecord is needed before retrying rks_story_ship: ${COVERAGE_RECORD_RECOVERY}`,
+      });
+    }
+    collector.emit('story_ship.step.completed', projectId, { step: 'coverage_record_gate', result: { verification: coverageRecordGate.verification } });
+    stepsCompleted++;
+  }
+
+  // Landing candidate (backlog.feat.landing-gate-combined-tree-test). Part of the opt-in gate:
+  // only with a valid enabled fullSuiteGate is the working branch's tip merged into this feature
+  // branch, so the gate below tests the tree that will land. With no gate configured nothing is
+  // prepared and this ship's result is unchanged. A refusal leaves the work committed on the
+  // feature branch; its result is spread, so no failure literal is written here.
+  let landing = null;
+  if (!deliveredEvidence && landingGateEnabled(projectRoot)) {
+    const landingPrep = prepareLandingCandidate({ projectRoot, target: working, tool: 'rks_story_ship' });
+    steps.push({ step: 'landing_candidate', ...landingPrep });
+    if (!landingPrep.ok) {
+      collector.emit('story_ship.failed', projectId, { storyId: problemId, failedStep: 'landing_candidate', reason: landingPrep.reason, worktreeBranch: currentBranch });
+      return buildShipFailure({
+        worktreeBranch: currentBranch,
+        baseBranch: working,
+        error: `Landing candidate refused ship (${landingPrep.reason}): ${working} could not be combined with ${currentBranch}`,
+        failedStep: 'landing_candidate',
+        landingCandidate: landingPrep,
+        steps,
+        hint: `Nothing was merged or pushed. ${landingPrep.reason === 'landing_conflict' ? `Resolve the conflict with ${working} (${(landingPrep.conflictFiles || []).join(', ')}) on ${currentBranch}` : `Inspect ${currentBranch} against ${working}`}, then retry rks_story_ship`,
+      });
+    }
+    landing = landingPrep;
+    collector.emit('story_ship.step.completed', projectId, { step: 'landing_candidate', result: { target: working, targetSha: landingPrep.targetSha, preparedSha: landingPrep.preparedSha, mergedTarget: landingPrep.mergedTarget } });
+    stepsCompleted++;
+  }
+
+  // Full-suite regression gate (backlog.feat.full-suite-regression-gate). OPT-IN ONLY:
+  // with no fullSuiteGate in .rks/project.json (or enabled: false, or an unreadable file)
+  // it runs nothing and this ship's result is unchanged — no step, no field. Placed after
+  // review and before the workingBranchIsLocal split so it precedes BOTH delivering arms
+  // (localMerge and deliverFeatureBranch). It blocks only on failing node IDs absent from
+  // fullSuiteGate.knownFailing, or when results are unavailable or the config is malformed.
+  // The story's own testFiles join a scoped gate's run (backlog.feat.landing-gate-combined-tree-test).
+  const fullSuiteGate = runFullSuiteGate(projectRoot, { extraTestPaths: loadStoryTestFiles(projectRoot, problemId) ?? [] });
+  if (fullSuiteGateApplies(fullSuiteGate)) {
+    // testedSha is HEAD observed after the run, never the prepared SHA restated.
+    const testedSha = landing ? readHeadSha(projectRoot) : null;
+    steps.push(fullSuiteGateStep(fullSuiteGate, landing ? { landing, testedSha } : undefined));
+    if (fullSuiteGate.blocked) {
+      collector.emit('story_ship.failed', projectId, { storyId: problemId, failedStep: 'full_suite_gate', reason: fullSuiteGate.reason, newFailures: fullSuiteGate.newFailures ?? [], worktreeBranch: currentBranch });
+      return buildShipFailure({
+        worktreeBranch: currentBranch,
+        baseBranch: working,
+        error: `Full-suite regression gate blocked ship (${fullSuiteGate.reason})`,
+        failedStep: 'full_suite_gate',
+        fullSuiteGate,
+        steps,
+        hint: withLandingClaim('Fix the new failing tests (fullSuiteGate.newFailures), or fix fullSuiteGate in .rks/project.json, then retry rks_story_ship', landingMergeCommitClaim(landing, currentBranch, working, 'was untouched (nothing was merged into it or pushed)')),
+      });
+    }
+    stepsCompleted++;
+  }
+
+  // Landing verify (backlog.feat.landing-gate-combined-tree-test): the working tip must still be
+  // the one merged in before the gate, and HEAD must still be the prepared tree; otherwise the
+  // tested tree is not the tree that would land, and nothing is delivered.
+  if (landing) {
+    const landingVerify = verifyTargetUnmoved({ projectRoot, target: working, expectedTargetSha: landing.targetSha, preparedSha: landing.preparedSha });
+    steps.push({ step: 'landing_verify', ...landingVerify });
+    if (!landingVerify.ok) {
+      collector.emit('story_ship.failed', projectId, { storyId: problemId, failedStep: 'landing_verify', reason: landingVerify.reason, worktreeBranch: currentBranch });
+      return buildShipFailure({
+        worktreeBranch: currentBranch,
+        baseBranch: working,
+        error: `Landing verify refused ship (${landingVerify.reason}): the tree the gate tested is not the tree that would land on ${working}`,
+        failedStep: 'landing_verify',
+        landingVerify,
+        steps,
+        hint: withLandingClaim(landingMergeCommitClaim(landing, currentBranch, working, 'was untouched (nothing was merged into it or pushed)') ?? 'Nothing was merged or pushed', 'Retry rks_story_ship so the landing candidate is prepared and tested again'),
+      });
+    }
+    stepsCompleted++;
+  }
+
+  if (deliveredEvidence) {
+    // backlog.fix.story-ship-unreachable-from-fresh-session: the story commit is already reachable
+    // from the delivered working ref, so there is no feature branch to merge and nothing to push.
+    // Recorded as a skip, never as a merge that did not happen.
+    steps.push({ step: 'local_merge', skipped: true, reason: 'already_on_working_branch', evidence: deliveredEvidence });
+    stepsSkipped++;
+  } else {
+    if (workingBranchIsLocal) {
+      // 3-branch workflow: local merge only, no push, no PR
+      collector.emit('story_ship.step.started', projectId, { step: 'local_merge', branch: currentBranch, target: working });
+      const mergeResult = localMerge(projectRoot, currentBranch, working);
+      
+      if (!mergeResult.ok) {
+        collector.emit('story_ship.failed', projectId, { storyId: problemId, failedStep: 'local_merge', error: mergeResult.error, worktreeBranch: currentBranch });
+        return buildShipFailure({
+          worktreeBranch: currentBranch,
+          baseBranch: working,
+          error: `Failed at local_merge: ${mergeResult.error}`,
+          steps,
+          hint: withLandingClaim("Resolve merge conflicts and retry rks_story_ship", landingMergeCommitClaim(landing, currentBranch, working, 'was not merged into'))
+        });
+      }
+      
+      steps.push({ step: 'local_merge', ok: true, from: currentBranch, to: working, warning: mergeResult.warning });
+      collector.emit('story_ship.step.completed', projectId, { step: 'local_merge', result: { from: currentBranch, to: working } });
+      stepsCompleted++;
+      
+      // Skip PR-related steps since we merged locally
+      steps.push({ step: 'working_pr', skipped: true, reason: 'local_merge_workflow' });
+      steps.push({ step: 'working_merge', skipped: true, reason: 'local_merge_workflow' });
+      stepsSkipped += 2;
+      
+    } else {
+      // 2-branch workflow: local merge into the working branch, delete the feature
+      // branch, push the working branch. NO PR — see
+      // notes/public.canon.build-path-analysis.md, "2-branch (local merge, no PR)".
+      //
+      // This is the arm that had drifted: it opened a PR while the off-rail rail, on the
+      // identical topology, local-merged and pushed. Delivery is now delegated to the
+      // SHARED implementation, which is the whole point of this story. `target` is
+      // REQUIRED and has no default; on-rail passes `working`, which is what this rail
+      // has always merged into.
+      collector.emit('story_ship.step.started', projectId, { step: 'local_merge', branch: currentBranch, target: working });
+      const delivery = deliverFeatureBranch({
+        projectRoot,
+        featureBranch: currentBranch,
+        branchConfig,
+        target: working,
+      });
+
+      if (delivery.mode === 'local_merge_failed') {
+        collector.emit('story_ship.failed', projectId, { storyId: problemId, failedStep: 'local_merge', error: delivery.error, worktreeBranch: currentBranch });
+        return buildShipFailure({
+          worktreeBranch: currentBranch,
+          baseBranch: working,
+          error: `Failed at local_merge: ${delivery.error}`,
+          steps,
+          hint: withLandingClaim("Resolve merge conflicts and retry rks_story_ship", landingMergeCommitClaim(landing, currentBranch, working, 'was not merged into'))
+        });
+      }
+
+      // Map the shared module's NEUTRAL record kinds into this rail's vocabulary, which
+      // is uniformly snake. `delete_branch` and `push_working` are NEW names: this rail
+      // deleted and pushed nothing on the 2-branch path before. `push_branch` is NOT
+      // reusable for the push — it named a push of the FEATURE branch, which AC 5 site 2
+      // removes along with every site that emitted it.
+      const mergeRecord = delivery.steps.find(s => s.kind === 'local_merge');
+      steps.push({ step: 'local_merge', ok: true, from: currentBranch, to: working, warning: mergeRecord?.warning });
+      collector.emit('story_ship.step.completed', projectId, { step: 'local_merge', result: { from: currentBranch, to: working } });
+      stepsCompleted++;
+
+      const deleteRecord = delivery.steps.find(s => s.kind === 'delete_branch');
+      if (deleteRecord) {
+        // `ok` is DERIVED from the shared module's observed record, never written as a
+        // false literal here. That also keeps this function's enumerated set of
+        // false-outcome literals unchanged, which ship-failure-branch-state.test.mjs
+        // pins — note that test scans SOURCE TEXT, so a comment quoting the literal
+        // would itself be picked up as a match.
+        steps.push({ step: 'delete_branch', ok: deleteRecord.ok === true, branch: currentBranch, ...(deleteRecord.error ? { error: deleteRecord.error } : {}) });
+      }
+
+      // A failed DELETE does not abort the push — the shared module pushes regardless,
+      // preserving the off-rail fall-through this delivery is now shared with. Only a
+      // failed PUSH is fatal.
+      const pushRecord = delivery.steps.find(s => s.kind === 'push_working');
+      if (!pushRecord || pushRecord.ok === false) {
+        const pushError = pushRecord?.error || delivery.error || 'Unknown push error';
+        collector.emit('story_ship.failed', projectId, { storyId: problemId, failedStep: 'push_working', error: pushError, worktreeBranch: currentBranch });
+        return buildShipFailure({
+          worktreeBranch: currentBranch,
+          baseBranch: working,
+          error: `Failed at push_working: ${pushError}`,
+          steps,
+          hint: "Check git remote configuration and retry rks_story_ship"
+        });
+      }
+      steps.push({ step: 'push_working', ok: true, branch: working, remote: 'origin' });
+      collector.emit('story_ship.step.completed', projectId, { step: 'push_working', result: { branch: working } });
+      stepsCompleted++;
+    }
+  }
+
+  // backlog.feat.exec-plan-commit-linkage (AC6/AC7): the SHA OBSERVED on the delivery target after
+  // delivery (a point-in-time observation labelled with its branch, never inferred). On the
+  // deliveredEvidence path it is the evidence commit. null when not observed.
+  let deliveredCommitSha = null;
+  if (deliveredEvidence) {
+    deliveredCommitSha = typeof deliveredEvidence.commit === 'string' && deliveredEvidence.commit.length > 0 ? deliveredEvidence.commit : null;
+  } else {
+    try {
+      const tip = spawnSync('git', ['rev-parse', '--verify', `refs/heads/${working}`], { cwd: projectRoot, encoding: 'utf8', timeout: 15000 });
+      const sha = typeof tip?.stdout === 'string' ? tip.stdout.trim() : '';
+      deliveredCommitSha = tip?.status === 0 && /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+    } catch (e) {
+      console.error(`[rks_story_ship] could not observe ${working} tip after delivery: ${e?.message}`);
+    }
+  }
+  const deliveredCommitBranch = deliveredCommitSha ? working : null;
+
+  // Per-story token cost reporting.
+  //
+  // RELOCATED here from inside the 2-branch arm, where it was bound to the PR body via
+  // a PR-body block. That arm is now topology-dead for PR purposes, so leaving
+  // the construction in place would have retired on-rail cost reporting as surely as
+  // deleting it. It now runs for BOTH topologies — 3-branch on-rail had no cost report
+  // at all before, because the construction sat in an arm 3-branch never entered.
+  //
+  // The `try`/`catch` is load-bearing: cost reporting must NEVER fail a ship. The step is
+  // `ok: true` only when a real report was observed, and otherwise an `ok`-less `skipped`
+  // entry — never a false outcome, which `reduceShipOk` would turn into a failed ship.
+  // (Stated without the literal on purpose: ship-failure-branch-state.test.mjs scans
+  // source text and would count a comment as an occurrence.)
+  const includeCostReport = context.projectJson?.prBodyIncludeCostReport !== false;
+  if (!includeCostReport) {
+    steps.push({ step: 'cost_report', skipped: true, reason: 'disabled_by_config' });
+    stepsSkipped++;
+  } else if (!problemId) {
+    // cost-report.mjs's reader accepts EVERY event in the file when storyId is falsy,
+    // while still labelling the result `scope: 'story'`. Refuse rather than fabricate.
+    steps.push({ step: 'cost_report', skipped: true, reason: 'no_story_id' });
+    stepsSkipped++;
+  } else {
+    try {
+      const { generateCostReport } = await import('@routekit/telemetry/cost-report');
+      const costReport = generateCostReport(projectRoot, { scope: 'story', storyId: problemId, format: 'markdown' });
+      if (!costReport || costReport.noData || !costReport.markdown) {
+        // noData carries no `markdown` key at all — never dress empty as real.
+        steps.push({ step: 'cost_report', skipped: true, reason: 'no_token_events', storyId: problemId });
+        stepsSkipped++;
+      } else {
+        steps.push({
+          step: 'cost_report',
+          ok: true,
+          storyId: problemId,
+          markdown: costReport.markdown,
+          rawCost: costReport.rawCost,
+          efficientCost: costReport.efficientCost,
+        });
+        stepsCompleted++;
+      }
+    } catch {
+      /* best-effort — never block ship on cost report failure */
+      steps.push({ step: 'cost_report', skipped: true, reason: 'generator_failed' });
+      stepsSkipped++;
+    }
+  }
+
+
+  // Step 2: REMOVED (AC 5 site 4). This block merged a PR into the working branch via
+  // runStagingMerge. No PR is opened on this path for ANY topology now — 3-branch
+  // local-merges and skips, 2-branch delivers through the shared module — so there is
+  // nothing to merge and no reachability condition under which this could fire. It is
+  // deleted rather than retained behind a comment claiming a condition that no longer
+  // exists.
+  //
+  // `runStagingMerge` itself is untouched and still serves rks_ship / genuinely
+  // PR-creating callers; only this call site goes.
+
+  // Step 2.5: Poll CI status after merge (best-effort, non-blocking)
+  const ghToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const mergeCommit = steps.find(s => s.step === 'working_merge' && s.ok)?.commitId;
+
+  if (mergeCommit && ghToken) {
+    try {
+      // Detect owner/repo from git remote
+      const remoteUrl = spawnSync('git', ['remote', 'get-url', 'origin'], { cwd: projectRoot, encoding: 'utf8' }).stdout.trim();
+      const match = remoteUrl.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
+
+      if (match) {
+        const [, owner, repo] = match;
+        collector.emit('ci.poll.start', projectId, { sha: mergeCommit, owner, repo });
+        const ciPollStartMs = Date.now();
+
+        const ciResult = await pollCiStatus(owner, repo, mergeCommit, ghToken, {
+          pollIntervalMs: 10_000,
+          timeoutMs: 300_000,
+        });
+
+        if (ciResult.status === 'pass') {
+          steps.push({ step: 'ci_check', ok: true, status: ciResult.status, name: ciResult.name });
+          collector.emit('ci.poll.pass', projectId, {
+            sha: mergeCommit,
+            conclusion: ciResult.conclusion,
+            checkNames: ciResult.name ? [ciResult.name] : [],
+            latencyMs: Date.now() - ciPollStartMs,
+          });
+          stepsCompleted++;
+        } else if (ciResult.status === 'fail') {
+          steps.push({ step: 'ci_check', ok: false, status: ciResult.status, conclusion: ciResult.conclusion, name: ciResult.name, url: ciResult.url });
+          collector.emit('ci.poll.fail', projectId, { sha: mergeCommit, conclusion: ciResult.conclusion, name: ciResult.name, url: ciResult.url });
+          stepsCompleted++;
+          // Non-blocking: CI failure is reported but doesn't stop the ship
+        } else {
+          steps.push({ step: 'ci_check', skipped: true, reason: 'timeout', status: ciResult.status });
+          collector.emit('ci.poll.fail', projectId, { sha: mergeCommit, reason: 'timeout' });
+          stepsSkipped++;
+        }
+      } else {
+        steps.push({ step: 'ci_check', skipped: true, reason: 'could_not_detect_remote' });
+        stepsSkipped++;
+      }
+    } catch (ciErr) {
+      steps.push({ step: 'ci_check', skipped: true, reason: ciErr.message });
+      stepsSkipped++;
+    }
+  } else {
+    steps.push({ step: 'ci_check', skipped: true, reason: !ghToken ? 'no_github_token' : 'no_merge_commit' });
+    stepsSkipped++;
+  }
+
+  // Step 3: Mark story as implemented (if provided and not already)
+  if (problemId) {
+    const notesDir = resolveNotesDir(projectRoot);
+    const storyPath = path.join(notesDir, `${problemId}.md`);
+    const implementedPath = path.join(notesDir, problemId.replace(/^backlog\./, 'backlog.z_implemented.') + '.md');
+
+    if (fs.existsSync(implementedPath)) {
+      steps.push({ step: 'mark_implemented', skipped: true, reason: 'already_implemented' });
+      collector.emit('story_ship.step.skipped', projectId, { step: 'mark_implemented', reason: 'already_implemented' });
+      stepsSkipped++;
+    } else if (fs.existsSync(storyPath)) {
+      try {
+        // NOTE: the `status` write used to be here, BEFORE any validation. When
+        // the phase advance below was rejected, the note was left reading
+        // `status: implemented` + `phase: arch-approved` — internally
+        // contradictory, and uncommitted because the commit lives only on the
+        // success path. It is now deferred until the transition is validated.
+        // Deferral rather than a compensating rollback write: updateField is a
+        // non-transactional read-modify-write, so a rollback can itself fail and
+        // reproduce the identical defect.
+        // Reconcile a story stuck at 'executing' (rks_exec's exec_end didn't complete)
+        // up to 'executed' FIRST, so the ship hop below (executed → integrated) succeeds
+        // instead of rejecting as "executing → integrated" and leaving the story stuck.
+        // No-op when the story is already 'executed' (the normal happy path).
+        //
+        // Coverage-record belt (backlog.fix.ship-archive-requires-exec-coverage-record): re-check
+        // the record against the DELIVERED commit before any phase or status write. The
+        // pre-delivery gate above normally makes this unreachable as a refusal; when it does
+        // refuse, it records a failed mark step and skips the archive rather than returning.
+        const beltNote = readCoverageGateFrontmatter(projectRoot, problemId);
+        const coverageBelt = beltNote.applies
+          ? evaluateCoverageRecordGate({
+              frontmatter: beltNote.frontmatter,
+              targetCommit: deliveredCommitSha,
+              policy: resolveUnverifiedCoveragePolicy(projectRoot),
+              isAncestor: (ancestor, descendant) => isCommitAncestor(projectRoot, ancestor, descendant),
+            })
+          : null;
+        if (coverageBelt && !coverageBelt.ok) {
+          steps.push(buildMarkImplementedFailure(`coverage record gate refused (${coverageBelt.reason}): ${coverageBelt.error}. ${COVERAGE_RECORD_RECOVERY}`));
+          collector.emit('story_ship.step.skipped', projectId, { step: 'mark_implemented', reason: coverageBelt.reason });
+          stepsSkipped++;
+        } else {
+          await reconcileExecutingBeforeShip(projectRoot, problemId, projectId);
+          // R1.3-followup: route through advancePhase('ship') instead of direct
+          // updateField. advancePhase validates the executed → integrated transition
+          // and emits telemetry. The rename below stays as the archival side-effect
+          // (matches R1.3f cycle-complete-agent pattern). Ordering: advancePhase BEFORE
+          // renameSync so a failed phase write doesn't leave a renamed file with
+          // stale phase.
+          const advanceResult = await advancePhase(projectRoot, problemId, 'ship', projectId);
+          if (!advanceResult.ok) {
+            steps.push(buildMarkImplementedFailure(`phase write rejected: ${advanceResult.error}`));
+            collector.emit('story_ship.step.skipped', projectId, { step: 'mark_implemented', reason: advanceResult.error });
+            stepsSkipped++;
+          } else {
+            // Deferred from above: only now that the transition validated do we
+            // record the workflow flag. status and phase stay SEPARATE fields —
+            // the separation is deliberate (status is a workflow flag, not a phase
+            // machine concern); what is fixed here is the inconsistency on failure.
+            updateField(notesDir, problemId, 'status', 'implemented');
+            // AC7: the delivered SHA and its branch, the same values as story_ship.success, in this
+            // same mark commit (commitId is the field name dendron_mark_implemented already uses).
+            // The commitId / commitBranch / id writes and the rename to z_implemented live in
+            // archiveShippedStory, the one archive implementation shared with the off-rail
+            // auto-ship and rks_phase_repair (backlog.fix.offrail-ship-and-phase-repair-skip-archive).
+            const newProblemId = problemId.replace(/^backlog\./, 'backlog.z_implemented.');
+            const archive = archiveShippedStory({
+              projectRoot,
+              notesDir,
+              problemId,
+              commitSha: deliveredCommitSha,
+              commitBranch: deliveredCommitBranch,
+            });
+            // A failed archive takes the same catch below a throwing updateField always took.
+            if (!archive.archived) throw new Error(archive.error || archive.reason);
+            const newPath = archive.newPath;
+            // Commit the backlog rename so downstream steps (cycle_complete, promote) see a clean tree
+            spawnSync('git', ['add', storyPath, newPath], { cwd: projectRoot, encoding: 'utf8' });
+            const markCommit = spawnSync('git', ['commit', '-m', `chore: mark ${problemId} as implemented`, '-m', provenanceTrailerLine({ defaultTool: 'rks_story_ship' })], { cwd: projectRoot, encoding: 'utf8' });
+            steps.push({ step: 'mark_implemented', ok: true, newPath: newProblemId, ...coverageMarkFields(coverageBelt) });
+            collector.emit('story_ship.step.completed', projectId, { step: 'mark_implemented', result: { newPath: newProblemId } });
+            stepsCompleted++;
+            // Carry the bookkeeping commit to origin BEFORE cycle_complete, whose gate refuses on
+            // unpushed local commits. Only when the working branch has an origin counterpart
+            // (the gate computes no ahead count otherwise) and only when the commit was actually
+            // created. The push goes through the shared delivery module; `ok` is its observed
+            // outcome, so no outcome literal is written in this function.
+            if (!workingBranchIsLocal && markCommit.status === 0) {
+              const bookkeepingPush = pushWorkingBranch({ projectRoot, branch: working });
+              steps.push({ step: 'push_bookkeeping', ok: bookkeepingPush.ok === true, branch: working, remote: 'origin', ...(bookkeepingPush.error ? { error: bookkeepingPush.error } : {}) });
+              if (bookkeepingPush.ok === true) {
+                collector.emit('story_ship.step.completed', projectId, { step: 'push_bookkeeping', result: { branch: working } });
+                stepsCompleted++;
+              } else {
+                collector.emit('story_ship.step.failed', projectId, { step: 'push_bookkeeping', reason: bookkeepingPush.error });
+                stepsSkipped++;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        // The message was always recorded; what was missing is the `ok` field
+        // (so the reduction could not see the failure) and the telemetry emit
+        // (so no channel reported it either).
+        steps.push(buildMarkImplementedFailure(err.message));
+        collector.emit('story_ship.step.skipped', projectId, { step: 'mark_implemented', reason: err.message });
+        stepsSkipped++;
+      }
+    } else {
+      // NEITHER note path exists. This branch did not exist at all: the step was
+      // absent from `steps` entirely, emitted no telemetry, and did not even
+      // increment stepsSkipped — silent in every channel, while ship reported
+      // success and the backlog record went unchanged.
+      steps.push(buildMarkImplementedFailure(`story note not found at ${storyPath} or ${implementedPath}`));
+      collector.emit('story_ship.step.skipped', projectId, { step: 'mark_implemented', reason: 'story_note_not_found' });
+      stepsSkipped++;
+    }
+  }
+
+  // Step 4: Complete the cycle (cleanup branch, sync to working branch)
+  const cycleResult = await runCycleComplete({ projectRoot, projectId, discardLocalCommits });
+  if (!cycleResult.ok) {
+    // backlog.fix.cycle-complete-ungated-hard-reset: NOT non-fatal any more. A refusal here means
+    // unpushed local commits would have been destroyed, which the ship result must report rather
+    // than absorb. The helper supplies the failure flag reduceShipOk needs.
+    //
+    // The flag is set inside buildCycleCompleteFailure, not written here: a pinning test in
+    // tests/unit/ship-failure-branch-state.test.mjs scans this function body by plain substring
+    // for that literal and requires every occurrence to belong to the ci_check step. Prose in a
+    // comment counts — spelling the literal out above is what reddened CI on 1726d5dc.
+    steps.push(buildCycleCompleteFailure(cycleResult.error, cycleResult.hint));
+    collector.emit('story_ship.step.failed', projectId, { step: 'cycle_complete', reason: cycleResult.error });
+    stepsSkipped++;
+  } else {
+    steps.push({ step: 'cycle_complete', ok: true, branch: cycleResult.branch });
+    collector.emit('story_ship.step.completed', projectId, { step: 'cycle_complete', result: { branch: cycleResult.branch } });
+    stepsCompleted++;
+  }
+
+  // Step 5 (optional): Auto-promote to integration if enabled
+  let promoteResult = null;
+  if (autoMergeIntegration && working !== integration) {
+    // Promote working → integration to trigger CI/preview builds
+    try {
+      promoteResult = await runPromote({ projectRoot, projectId });
+      if (promoteResult.ok) {
+        steps.push({ step: 'promote', ok: true, from: working, to: integration });
+        collector.emit('story_ship.step.completed', projectId, { step: 'promote', result: { from: working, to: integration } });
+        stepsCompleted++;
+      } else {
+        steps.push({ step: 'promote', skipped: true, reason: promoteResult.error });
+        collector.emit('story_ship.step.skipped', projectId, { step: 'promote', reason: promoteResult.error });
+        stepsSkipped++;
+      }
+    } catch (err) {
+      steps.push({ step: 'promote', skipped: true, reason: err.message });
+      stepsSkipped++;
+    }
+  }
+
+  // ONE source of truth for both the telemetry channel and the return value.
+  // Nothing pushes a step between the last push above and this point, so both
+  // reads see an identical array and the channels cannot disagree.
+  const shipOk = reduceShipOk(steps);
+
+  // Outcome telemetry. This emit was previously UNCONDITIONAL: a ship whose
+  // mark_implemented failed reported the failure in its return value and emitted
+  // story_ship.success in the same breath, and the dashboards kept counting it
+  // as shipped.
+  if (shipOk) {
+    collector.emit('story_ship.success', projectId, {
+      storyId: problemId,
+      durationMs: Date.now() - shipStartMs,
+      stepsCompleted,
+      stepsSkipped,
+      prUrl,
+      workingBranch: working,
+      autoPromoted: autoMergeIntegration && working !== integration,
+      commitSha: deliveredCommitSha,
+      commitBranch: deliveredCommitBranch,
+    });
+  } else {
+    collector.emit('story_ship.failed', projectId, {
+      storyId: problemId,
+      durationMs: Date.now() - shipStartMs,
+      failedStep: (steps.find(s => s.ok === false) || {}).step || 'unknown',
+      failedSteps: steps.filter(s => s.ok === false).map(s => s.step),
+      stepsCompleted,
+      stepsSkipped,
+      prUrl,
+      workingBranch: working,
+      worktreeBranch: currentBranch,
+    });
+  }
+
+  // Report the tree's ACTUAL state. This sentence used to be a hardcoded claim
+  // with no git call behind it, so it asserted a clean tree unconditionally.
+  const residualDirty = getUncommittedFiles(projectRoot, { filterRks: true })
+    .filter(f => !f.startsWith('notes/'));
+  const treeClause = residualDirty.length === 0
+    ? 'with a clean working tree'
+    : `with ${residualDirty.length} uncommitted file(s): ${residualDirty.join(', ')}`;
+  // Delivery vs bookkeeping: claim delivery to origin ONLY from an observed push_working
+  // step whose ok is true (never from topology or intent), and name the failed step(s)
+  // read from `steps`. The local arm records no push_working, so it never claims delivery.
+  const deliveredPush = steps.find(s => s.step === 'push_working' && s.ok === true);
+  const failedStepNames = steps.filter(s => s.ok === false).map(s => s.step);
+  const deliveryClause = deliveredPush
+    ? ` Delivery reached origin: ${deliveredPush.branch} was pushed to ${deliveredPush.remote}; failed step(s): ${failedStepNames.join(', ')}.`
+    : '';
+  const nextMessage = shipOk
+    ? `You are now on ${working} ${treeClause}. Ready for the next story.`
+    : `You are now on ${working} ${treeClause}. The ship did NOT complete — inspect steps for the failed entry before continuing.${deliveryClause}`;
+
+  return {
+    ok: shipOk,
+    clean: residualDirty.length === 0,
+    summary: shipOk
+      ? `Story shipped: ${stepsCompleted} step(s) completed, ${stepsSkipped} skipped (idempotent)`
+      : `Story NOT shipped: ${steps.filter(s => s.ok === false).length} step(s) failed, ${stepsCompleted} completed, ${stepsSkipped} skipped`,
+    steps,
+    stepsCompleted,
+    stepsSkipped,
+    prUrl,
+    workingBranch: working,
+    autoPromoted: autoMergeIntegration && working !== integration,
+    next: nextMessage
+  };
+}
+
+/**
+ * Build the return payload for every `ok: false` exit of runStoryShipTool.
+ *
+ * Callers pass their own fields (error, failedStep, steps, prUrl, review, hint);
+ * this stamps `worktreeBranch`, `baseBranch` and an explicit `branchRestored: false`
+ * on top, and appends both branch names to the hint so an LLM caller that reads
+ * only the hint still learns which branch the worktree was left on.
+ *
+ * DO NOT add a checkout, switch or spawn to this helper. Restoring the base branch
+ * on failure looks helpful and is a bug. The `currentBranch === working` block near
+ * the top of runStoryShipTool (story-ship.mjs:279 at @6a0022135, before
+ * backlog.fix.story-ship-unreachable-from-fresh-session) used to return `ok: true` with
+ * `idempotent: true` WITHOUT doing any work, for every story. It now returns that only
+ * when the delivered working ref already shows the story integrated; it advances an
+ * executed story only on a story commit reachable from that ref, and refuses the rest.
+ * Restoring is still wrong: a retry from the base branch would skip the review and the
+ * delivery that failed and be judged by the working-branch rules instead, so the
+ * failure the operator must see would be replaced by a different verdict from a
+ * different code path. Report the branch; never move it.
+ *
+ * Exported so backlog.fix.ship-review-fail-closed can route its new failure exit
+ * through the same payload, and so the contract is unit-testable with no git repo.
+ */
+export function buildShipFailure({ worktreeBranch, baseBranch, hint, ...rest }) {
+  const branchNote =
+    `worktree remains on \`${worktreeBranch}\` and was NOT restored — ` +
+    `the next operation runs against \`${worktreeBranch}\`, not \`${baseBranch}\``;
+  return {
+    ...rest,
+    ok: false,
+    worktreeBranch,
+    baseBranch,
+    branchRestored: false,
+    hint: hint ? `${hint}. ${branchNote}` : branchNote,
+  };
+}
+
+/**
+ * backlog.fix.landing-refusal-hints-observed-branch-state: the landing merge commit claim for a
+ * refusal after landing preparation. Stated only when landing.mergedTarget is true (the prepared
+ * SHA is then a merge commit of `working`'s tip on the feature branch); null otherwise, so a
+ * refusal with no landing, or one whose feature branch already contained `working`, keeps its hint.
+ * `workingState` is the caller's observation of the working ref on that exit.
+ */
+function landingMergeCommitClaim(landing, featureBranch, working, workingState) {
+  if (landing?.mergedTarget !== true) return null;
+  return `${working} ${workingState}, and ${featureBranch} now carries the landing merge commit ${landing.preparedSha} (${working} at ${landing.targetSha} merged in before the gate)`;
+}
+
+/** `hint` followed by `claim` as a further sentence; `hint` unchanged when there is no claim. */
+function withLandingClaim(hint, claim) {
+  return claim ? `${hint}. ${claim}` : hint;
+}
