@@ -1,0 +1,77 @@
+#!/bin/sh
+# .routekit/git-hooks/pre-commit
+# Git pre-commit hook: runs gitleaks on staged files to block secret leaks.
+#
+# How this hook is armed (no manual step):
+#   scripts/install-git-hooks.mjs installs a managed shim in the repository's git hooks
+#   directory (`git rev-parse --git-path hooks`) that runs this file, and provisions a pinned,
+#   SHA-256-verified gitleaks into <git-common-dir>/rks-tools/gitleaks/. It runs from the
+#   `prepare` script on `npm install` in the rks shell, and from `routekit project init`,
+#   `attach` and `upgrade` in a child project.
+#
+# This hook fails CLOSED: when no gitleaks can be found the commit is refused.
+# To skip the scan for one commit (an explicit, affirmative override):
+#   RKS_ALLOW_UNSCANNED_COMMIT=1 git commit ...
+#
+# This hook is intentionally POSIX sh (not bash) for maximum portability.
+
+# Override first: skip the scan whether or not gitleaks is present, and say so.
+if [ "${RKS_ALLOW_UNSCANNED_COMMIT:-}" = "1" ]; then
+  echo "[pre-commit] WARNING: RKS_ALLOW_UNSCANNED_COMMIT=1 is set — gitleaks secret scan SKIPPED for this commit." >&2
+  exit 0
+fi
+
+GITLEAKS_CONFIG=".gitleaks.toml"
+
+# Resolve gitleaks: the rks-provisioned copy first, then PATH.
+GITLEAKS=""
+COMMON_DIR="$(git rev-parse --git-common-dir 2>/dev/null)" || COMMON_DIR=""
+if [ -n "$COMMON_DIR" ]; then
+  for CANDIDATE in "$COMMON_DIR/rks-tools/gitleaks/gitleaks" "$COMMON_DIR/rks-tools/gitleaks/gitleaks.exe"; do
+    if [ -f "$CANDIDATE" ] && [ -x "$CANDIDATE" ]; then
+      GITLEAKS="$CANDIDATE"
+      break
+    fi
+  done
+fi
+if [ -z "$GITLEAKS" ]; then
+  GITLEAKS="$(command -v gitleaks 2>/dev/null || true)"
+fi
+
+if [ -z "$GITLEAKS" ]; then
+  {
+    echo "[pre-commit] REFUSED: gitleaks was not found, so the staged changes cannot be scanned for secrets."
+    echo "[pre-commit] Looked for: <git-common-dir>/rks-tools/gitleaks/gitleaks, then gitleaks on PATH."
+    echo "[pre-commit] Re-provision the pinned scanner:"
+    echo "[pre-commit]   in the rks shell:       npm install"
+    echo "[pre-commit]   in a child project:     routekit project upgrade"
+    echo "[pre-commit] Or install gitleaks yourself: https://github.com/gitleaks/gitleaks"
+    echo "[pre-commit] To commit WITHOUT a secret scan: RKS_ALLOW_UNSCANNED_COMMIT=1 git commit ..."
+  } >&2
+  exit 1
+fi
+
+# Check that the config file exists
+if [ ! -f "$GITLEAKS_CONFIG" ]; then
+  echo "[pre-commit] WARNING: $GITLEAKS_CONFIG not found — running with default ruleset."
+  GITLEAKS_CONFIG=""
+fi
+
+# Run gitleaks against staged files only
+if [ -n "$GITLEAKS_CONFIG" ]; then
+  "$GITLEAKS" protect --staged --config "$GITLEAKS_CONFIG" --exit-code 1
+else
+  "$GITLEAKS" protect --staged --exit-code 1
+fi
+
+STATUS=$?
+
+if [ $STATUS -ne 0 ]; then
+  echo ""
+  echo "[pre-commit] gitleaks detected potential secrets in staged files."
+  echo "[pre-commit] Review the findings above before committing."
+  echo "[pre-commit] If this is a false positive, add an allowlist entry to .gitleaks.toml."
+  exit 1
+fi
+
+exit 0

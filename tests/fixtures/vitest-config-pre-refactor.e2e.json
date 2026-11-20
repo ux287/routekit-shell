@@ -1,0 +1,29 @@
+{
+  "_comment": "B5 pre-refactor effective config for vitest.config.e2e.mjs. The post-refactor merged config MUST match this fixture exactly.",
+  "include": [
+    "tests/e2e/**/*.test.*",
+    "tests/e2e/**/*.spec.*"
+  ],
+  "exclude": [
+    "tests/.tmp/**"
+  ],
+  "bail": 1,
+  "isolate": true,
+  "pool": "forks",
+  "poolOptions": {
+    "forks": {
+      "minForks": 1,
+      "maxForks": 2
+    }
+  },
+  "setupFiles": [
+    "tests/setup.mjs"
+  ],
+  "clearMocks": true,
+  "env": {
+    "NODE_NO_WARNINGS": "1",
+    "ROUTEKIT_SKIP_GLOBAL_CONFIG": "true"
+  },
+  "hookTimeout": null,
+  "testTimeout": 60000
+}

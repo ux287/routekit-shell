@@ -1,0 +1,36 @@
+{
+  "$comment": "Canonical inventory of the shell's skills. This file is the ONE source of truth: the sync/bootstrap distribution rule and the preflight health check both read it, so neither can hold a private list that silently drifts from the other (or from disk). tests/unit/skills-manifest-coverage.test.mjs asserts manifest === filesystem in both directions, so adding or removing a skill directory without updating this file is a red test, not a silent divergence. Mirrors .routekit/hooks-manifest.json.",
+  "version": 1,
+  "skills": [
+    "arch",
+    "build",
+    "ci",
+    "doctor",
+    "git-preflight",
+    "memory",
+    "ops",
+    "pipeline",
+    "po",
+    "promote",
+    "qa",
+    "release",
+    "research",
+    "rks-onboard",
+    "rks-welcome",
+    "ship",
+    "telemetry",
+    "telemetry-export",
+    "whitepaper"
+  ],
+  "shellOnly": [
+    "promote"
+  ],
+  "$comment_notPublished": "Skills that are first-class in the full repo but are EXCLUDED from a published distribution together with a companion path. A consumer treats such a skill as legitimately absent ONLY when its 'requires' path is also absent — so a real skill wipe, which leaves the companion standing, still reports missing. Optional and additive; absent or malformed, every absent skill is treated as genuinely missing (fail closed).",
+  "notPublished": [
+    {
+      "skill": "whitepaper",
+      "requires": "packages/whitepaper",
+      "reason": "excluded from the rks-public archive together with its renderer package"
+    }
+  ]
+}

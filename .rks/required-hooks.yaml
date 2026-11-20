@@ -1,0 +1,33 @@
+# Hook integrity check configuration (dynamic discovery enabled)
+# requiredHooks list removed — hooks are now discovered by scanning .routekit/hooks/ directory
+config:
+  # Directory where Claude Code interceptor hooks are located (PreToolUse/PostToolUse .mjs files)
+  hooksPath: ".routekit/hooks"
+  # Whether to block commits on missing hooks
+  blockOnMissing: true
+  # Recovery instructions for missing hooks
+  recoveryInstructions:
+    - "Restore from git: git checkout HEAD~10 -- .routekit/hooks/"
+    - "Or from template: cp -r templates/generic/.routekit/hooks/ .routekit/"
+    - "Commit the restored hooks before continuing"
+
+# ---------------------------------------------------------------------------
+# Git native hooks (separate from Claude Code hooks above)
+# ---------------------------------------------------------------------------
+# Native git hooks live in .routekit/git-hooks/ and are registered via:
+#   git config core.hooksPath .routekit/git-hooks
+#
+# This command must be run once per clone (it is NOT stored in .git/config
+# automatically). Add it to your project onboarding / install-hooks script.
+#
+# Current native hooks:
+#   pre-commit  — runs gitleaks protect --staged to block secret leaks
+#                 Requires: gitleaks installed (brew install gitleaks)
+#                 Config:   .gitleaks.toml at project root
+gitHooks:
+  hooksPath: ".routekit/git-hooks"
+  installCommand: "git config core.hooksPath .routekit/git-hooks"
+  hooks:
+    - name: "pre-commit"
+      purpose: "Secret scanning via gitleaks (blocks staged credentials)"
+      requires: "gitleaks >= 8.0"

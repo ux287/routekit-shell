@@ -1,0 +1,251 @@
+# Orchestrator Query Classification Patterns
+# Defines rules for analyzing queries and determining orchestration strategies
+
+patterns:
+  # Implementation query patterns
+  implementation:
+    triggers:
+      - regex: "how\\s+(do|can|to)\\s+i?\\s*(implement|build|create|add|setup|configure)"
+        case_insensitive: true
+        examples:
+          - "How do I implement authentication?"
+          - "How can I add dark mode?"
+          - "How to setup the CLI tools?"
+      - contains_any:
+          - "step by step"
+          - "walk me through"
+          - "show me how to"
+          - "guide me through"
+    classification:
+      type: "implementation"
+      complexity: "multi-step"
+      format: "implementation"
+    orchestration:
+      steps:
+        - type: "pattern_search"
+          description: "Search for existing patterns"
+        - type: "implementation_search" 
+          description: "Find specific implementation guidance"
+        - type: "synthesis"
+          description: "Combine into step-by-step guide"
+
+  # Comparative query patterns  
+  comparative:
+    triggers:
+      - regex: "(compare|versus|vs\\.?|difference\\s+between|better|best\\s+between)"
+        case_insensitive: true
+        examples:
+          - "Compare React vs Vue"
+          - "What's the difference between CLI and templates?"
+          - "Which is better: A vs B?"
+      - contains_any:
+          - "pros and cons"
+          - "advantages and disadvantages" 
+          - "trade-offs"
+          - "which should I choose"
+    classification:
+      type: "comparative"
+      complexity: "multi-step"
+      format: "comparison"
+    orchestration:
+      steps:
+        - type: "parallel_search"
+          description: "Search for each comparison target"
+        - type: "comparison_synthesis"
+          description: "Generate structured comparison"
+
+  # Architectural/best practice patterns
+  architectural:
+    triggers:
+      - regex: "(best\\s+(approach|practice|way|method)|recommended|should\\s+i|architecture|pattern)"
+        case_insensitive: true
+        examples:
+          - "What's the best approach for state management?"
+          - "Recommended architecture for this app?"
+          - "Should I use X or Y pattern?"
+      - contains_any:
+          - "best practices"
+          - "recommended approach"
+          - "design patterns"
+          - "architecture decisions"
+    classification:
+      type: "architectural"
+      complexity: "multi-step"
+      format: "guidance"
+    orchestration:
+      steps:
+        - type: "architecture_search"
+          description: "Search architectural patterns"
+        - type: "implementation_examples"
+          description: "Find implementation examples"
+        - type: "recommendation_synthesis"
+          description: "Generate contextualized recommendations"
+
+  # Discovery query patterns
+  discovery:
+    triggers:
+      - regex: "(what\\s+(are|options|choices|alternatives)|show\\s+me\\s+all|list\\s+(all|available))"
+        case_insensitive: true
+        examples:
+          - "What are my options for styling?"
+          - "Show me all available templates"
+          - "List available CLI commands"
+      - contains_any:
+          - "what options"
+          - "what choices"
+          - "what alternatives"
+          - "available options"
+    classification:
+      type: "discovery"
+      complexity: "comprehensive"
+      format: "reference"
+    orchestration:
+      steps:
+        - type: "comprehensive_search"
+          description: "Comprehensive search across domains"
+        - type: "categorization"
+          description: "Organize and categorize findings"
+
+  # Simple factual patterns (no orchestration needed)
+  factual:
+    triggers:
+      - regex: "^what\\s+is\\s+"
+        case_insensitive: true
+        examples:
+          - "What is RouteKit?"
+          - "What is the CLI?"
+      - regex: "^define\\s+"
+        case_insensitive: true
+      - contains_any:
+          - "definition of"
+          - "meaning of"
+          - "explain what"
+    classification:
+      type: "factual"
+      complexity: "simple"
+      format: "guidance"
+    orchestration:
+      steps:
+        - type: "direct_retrieval"
+          description: "Direct retrieval for simple query"
+
+# Complexity indicators that upgrade simple queries to multi-step
+complexity_indicators:
+  multi_step:
+    - "multiple"
+    - "several"  
+    - "various"
+    - "different"
+    - "across domains"
+    - "end-to-end"
+    - "complete workflow"
+  
+  comprehensive:
+    - "comprehensive"
+    - "complete"
+    - "full"
+    - "entire"
+    - "all aspects"
+    - "detailed"
+
+# Domain-specific routing hints
+domain_hints:
+  cli:
+    keywords:
+      - "command"
+      - "CLI" 
+      - "terminal"
+      - "script"
+      - "routekit"
+    boost_factor: 1.2
+  
+  design_system:
+    keywords:
+      - "component"
+      - "design"
+      - "UI"
+      - "styling"
+      - "theme"
+    boost_factor: 1.2
+    
+  templates:
+    keywords:
+      - "template"
+      - "scaffold"
+      - "project"
+      - "boilerplate"
+    boost_factor: 1.2
+
+# Orchestration thresholds and limits
+orchestration:
+  thresholds:
+    # Minimum word count to consider orchestration
+    min_words_for_orchestration: 4
+    
+    # Maximum number of steps in orchestration plan
+    max_orchestration_steps: 5
+    
+    # Maximum parallel queries in single step
+    max_parallel_queries: 3
+    
+    # Time limits (milliseconds)
+    max_step_time: 10000
+    max_total_time: 30000
+
+  performance:
+    # When to prefer direct routing over orchestration
+    prefer_direct_if:
+      - query_confidence_high: 0.8
+      - single_domain_match: true
+      - word_count_low: 3
+    
+    # Response size limits
+    max_passages_per_step: 10
+    max_total_passages: 20
+
+# Error handling and fallback strategies  
+fallback:
+  on_orchestration_failure:
+    strategy: "direct_retrieval"
+    message: "Orchestration failed, falling back to direct search"
+  
+  on_classification_uncertainty:
+    strategy: "factual"
+    confidence_threshold: 0.6
+  
+  on_timeout:
+    strategy: "partial_results"
+    message: "Orchestration timed out, returning partial results"
+
+# Testing and debugging
+debug:
+  log_classification_decisions: true
+  log_orchestration_plans: true
+  trace_step_execution: true
+  
+testing:
+  sample_queries:
+    implementation:
+      - "How do I implement authentication in RouteKit?"
+      - "How can I add a new CLI command?"
+      - "Walk me through setting up the design system"
+    
+    comparative:
+      - "Compare CLI approach vs template approach"
+      - "What's the difference between RAG and FS search?"
+      - "React vs Vue for RouteKit templates"
+    
+    architectural:
+      - "Best approach for state management in RouteKit?"
+      - "Recommended patterns for error handling"
+      - "Should I use monorepo or separate repos?"
+    
+    discovery:
+      - "What are all the available CLI commands?"
+      - "Show me all design system components"
+      - "List all available project templates"
+    
+    factual:
+      - "What is RouteKit Shell?"
+      - "Define MCP integration"
+      - "What is the purpose of the RAG system?"

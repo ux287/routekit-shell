@@ -1,0 +1,11 @@
+{
+  "id": "synthetic-governor-token",
+  "sourceRun": "synthetic",
+  "sourceStatus": "synthetic",
+  "projectId": "routekit-shell",
+  "capturedAt": "2026-02-23T00:00:00.000Z",
+  "description": "Synthetic golden scenario targeting governor token infrastructure. Verifies search patterns match current code in governor-token.mjs.",
+  "stepsCount": 2,
+  "problemId": null,
+  "synthetic": true
+}

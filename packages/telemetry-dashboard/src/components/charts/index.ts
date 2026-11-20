@@ -1,0 +1,1 @@
+export { TypeBreakdownChart } from './TypeBreakdownChart';

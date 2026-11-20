@@ -1,0 +1,53 @@
+# Branch workflow policy for RouteKit Shell
+# Enforces feature branch workflow: branch from working, merge to integration
+# User reviews integration -> production periodically
+#
+# Branch Topology Configuration
+# -----------------------------
+# Projects can override branch names via project.json registry:
+#   {
+#     "branches": {
+#       "working": "dev",          // daily work (default: staging)
+#       "integration": "staging",  // CI/preview builds (default: staging)
+#       "production": "main"       // production (default: main)
+#     }
+#   }
+#
+# When project config exists, MCP tools read branch roles from there.
+# This file defines DEFAULTS for projects without custom config.
+
+# Default branch topology (can be overridden per-project)
+branch_topology:
+  working: staging       # Branch for daily development
+  integration: staging   # Branch that triggers CI/preview builds
+  production: main       # Production release branch
+
+# The base branch that feature branches should be created from
+# Uses: branch_topology.working
+base_branch: staging
+
+# Branches that are protected (no direct commits allowed)
+# Uses: branch_topology.integration and branch_topology.production
+protected_branches:
+  - main
+  - staging
+
+# Pattern for valid feature branch names
+# Must match: feature/*, fix/*, refactor/*, docs/*, chore/*, rks/*
+feature_branch_pattern: "^(feature|fix|refactor|docs|chore|rks)/.+"
+
+# Require tests to pass before merging to integration
+require_tests_before_merge: true
+merge_test_command: "npm test"
+
+# Block direct commits to these branches (must use feature branches)
+# Uses: branch_topology.integration and branch_topology.production
+block_direct_commits_to:
+  - main
+  - staging
+
+# Merges to production are blocked (use PRs via GitHub)
+block_merge_to_production: true
+
+# Allow these branches to bypass checks (for bootstrapping)
+exempt_branches: []
